@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   run:
@@ -41,9 +42,16 @@ jobs:
           cfg.headless = true;
           cfg.clusters = 1;
 
+          cfg.searchSettings = cfg.searchSettings || {};
+          cfg.searchSettings.searchDelay = { min: "20sec", max: "35sec" };
+          cfg.searchSettings.readDelay = { min: "10sec", max: "20sec" };
+
           cfg.webhook = cfg.webhook || {};
           cfg.webhook.telegram = cfg.webhook.telegram || {};
-          cfg.webhook.telegram.enabled = true;
+
+          // Tắt Telegram nội bộ của bot để tránh gửi liên tục.
+          // GitHub Actions sẽ gửi 1 tin tổng kết ở cuối workflow.
+          cfg.webhook.telegram.enabled = false;
           cfg.webhook.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN || "";
           cfg.webhook.telegram.chatId = process.env.TELEGRAM_CHAT_ID || "";
 
@@ -114,10 +122,14 @@ jobs:
 
           ssh -o StrictHostKeyChecking=no \
               -o ExitOnForwardFailure=yes \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=6 \
               -f -N -D 127.0.0.1:1080 \
               -p 2210 \
               -i ~/.ssh/azdigi_key \
               labotecc@hv42-25048.azdigihost.com
+
+          sleep 2
 
       - name: Test AZDIGI SOCKS5 tunnel
         run: |
@@ -148,10 +160,10 @@ jobs:
           BOT_STATUS: ${{ steps.run_bot.outcome }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          SUMMARY="$(grep -E 'RUN-END|RECOVERY_ACCOUNT_RESULT|ACCOUNT-ERROR|pointsGained|Completed all accounts' bot-run.log | tail -80 || true)"
+          SUMMARY="$(grep -E 'RUN-END|RECOVERY_ACCOUNT_RESULT|ACCOUNT-ERROR|pointsGained|Completed all accounts|SEARCH-MANAGER|FLOW_FAILED' bot-run.log | tail -120 || true)"
 
           if [ -z "$SUMMARY" ]; then
-            SUMMARY="$(tail -80 bot-run.log || true)"
+            SUMMARY="$(tail -120 bot-run.log || true)"
           fi
 
           TEXT="Microsoft Rewards run: ${BOT_STATUS}
@@ -164,17 +176,6 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${TEXT}"
 
-      - name: Fail workflow if bot failed
-        if: steps.run_bot.outcome == 'failure'
-        run: exit 1
-
-
-# Xóa action sau khi chạy xong
-        permissions:
-  actions: write
-  contents: read
-
-# cuối workflow
       - name: Delete this workflow run
         if: always()
         env:

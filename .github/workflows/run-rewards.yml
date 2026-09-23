@@ -9,6 +9,10 @@ permissions:
   contents: read
   actions: write
 
+concurrency:
+  group: rewards-run
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -25,6 +29,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Restore bot sessions
+        uses: actions/cache@v4
+        with:
+          path: bot/sessions
+          key: rewards-sessions-${{ github.ref_name }}
 
       - name: Create local secrets/config
         working-directory: bot
@@ -46,11 +56,18 @@ jobs:
           cfg.searchSettings.searchDelay = { min: "20sec", max: "35sec" };
           cfg.searchSettings.readDelay = { min: "10sec", max: "20sec" };
 
+          cfg.workers = cfg.workers || {};
+          cfg.workers.doDesktopSearch = true;
+          cfg.workers.doMobileSearch = true;
+          cfg.workers.doDailySet = true;
+          cfg.workers.doDailyCheckIn = true;
+          cfg.workers.doReadToEarn = true;
+
           cfg.webhook = cfg.webhook || {};
           cfg.webhook.telegram = cfg.webhook.telegram || {};
 
-          // Tắt Telegram nội bộ của bot để tránh gửi liên tục.
-          // GitHub Actions sẽ gửi 1 tin tổng kết ở cuối workflow.
+          // Avoid Telegram spam from inside the bot.
+          // GitHub Actions sends one final summary instead.
           cfg.webhook.telegram.enabled = false;
           cfg.webhook.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN || "";
           cfg.webhook.telegram.chatId = process.env.TELEGRAM_CHAT_ID || "";
@@ -176,11 +193,6 @@ jobs:
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${TEXT}"
 
-      - name: Delete this workflow run
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api \
-            --method DELETE \
-            /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Fail workflow if bot failed
+        if: steps.run_bot.outcome == 'failure'
+        run: exit 1

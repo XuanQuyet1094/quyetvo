@@ -1,0 +1,5 @@
+- name: Clone private bot repo
+  env:
+    PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+  run: |
+    git clone --branch v4 --single-branch "https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/XuanQuyet1094/Microsoft-Rewards-Script.git" bot

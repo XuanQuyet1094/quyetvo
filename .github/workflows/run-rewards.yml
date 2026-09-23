@@ -1,21 +1,58 @@
-name: test-clone-private-repo
+name: run-rewards
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "15 0 * * *" # 07:15 Vietnam time
 
 jobs:
-  test-clone:
+  run:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
 
     steps:
-      - name: Clone private repo
+      - name: Clone private bot repo
         env:
           PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           git clone --branch v4 --single-branch "https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/XuanQuyet1094/Microsoft-Rewards-Script.git" bot
 
-      - name: Verify clone
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Create local secrets/config
+        working-directory: bot
         run: |
-          test -f bot/package.json
-          git -C bot branch --show-current
-          git -C bot log -1 --oneline
+          if [ ! -f config.json ]; then cp config.example.json config.json; fi
+          if [ ! -f .env ]; then cp env.example .env; fi
+
+          cat >> .env <<'EOF'
+          ACCOUNT_1_EMAIL=${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_1_PASSWORD=${{ secrets.ACCOUNT_1_PASSWORD }}
+          ACCOUNT_1_GEO_LOCALE=VN
+          ACCOUNT_1_LANG_CODE=vi
+          ACCOUNT_1_PROXY_HTTP=false
+          ACCOUNT_1_PROXY_URL=127.0.0.1
+          ACCOUNT_1_PROXY_PORT=1080
+          EOF
+
+      - name: Start AZDIGI SOCKS5 tunnel
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.AZDIGI_SSH_KEY }}" > ~/.ssh/azdigi_key
+          chmod 600 ~/.ssh/azdigi_key
+          ssh -o StrictHostKeyChecking=no -f -N -D 127.0.0.1:1080 -p 2210 -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
+
+      - name: Install dependencies
+        working-directory: bot
+        run: |
+          npm ci
+          npx patchright install chromium
+          npm run build
+
+      - name: Run bot
+        working-directory: bot
+        run: |
+          npm start

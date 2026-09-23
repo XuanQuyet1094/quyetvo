@@ -1,3 +1,67 @@
+name: run-rewards
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 0 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rewards-account-1
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          repository: XuanQuyet1094/Microsoft-Rewards-Script
+          ref: v4
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install and build
+        run: |
+          npm ci --include=dev
+          npx --no-install patchright install --with-deps chromium
+          npm run build
+          test -f dist/index.js
+
+      - name: Configure headless browser
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const cfg = JSON.parse(fs.readFileSync('config.example.json', 'utf8'));
+          cfg.headless = true;
+          cfg.clusters = 1;
+          cfg.errorDiagnostics = false;
+          cfg.debugLogs = false;
+          for (const name of ['telegram', 'discord', 'ntfy']) {
+            if (cfg.webhook?.[name]) cfg.webhook[name].enabled = false;
+          }
+          fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2) + '\n', {mode: 0o600});
+          // Account credentials are provided through the process environment.
+          fs.writeFileSync('.env', '', {mode: 0o600});
+          NODE
+
+      - name: Start and check SOCKS5
+        env:
+          AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
+          AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
+        run: |
           : "${AZDIGI_SSH_KEY:?Missing AZDIGI_SSH_KEY}"
           : "${AZDIGI_KNOWN_HOSTS:?Missing AZDIGI_KNOWN_HOSTS}"
           install -d -m 700 ~/.ssh

@@ -1,5 +1,21 @@
-- name: Clone private bot repo
-  env:
-    PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
-  run: |
-    git clone --branch v4 --single-branch "https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/XuanQuyet1094/Microsoft-Rewards-Script.git" bot
+name: test-clone-private-repo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-clone:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone private repo
+        env:
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          git clone --branch v4 --single-branch "https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/XuanQuyet1094/Microsoft-Rewards-Script.git" bot
+
+      - name: Verify clone
+        run: |
+          test -f bot/package.json
+          git -C bot branch --show-current
+          git -C bot log -1 --oneline

@@ -24,6 +24,9 @@ jobs:
 
       - name: Create local secrets/config
         working-directory: bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           cp config.example.json config.json
 
@@ -31,7 +34,16 @@ jobs:
           const fs = require('fs');
           const p = 'config.json';
           const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+
           cfg.headless = true;
+          cfg.clusters = 1;
+
+          cfg.webhook = cfg.webhook || {};
+          cfg.webhook.telegram = cfg.webhook.telegram || {};
+          cfg.webhook.telegram.enabled = true;
+          cfg.webhook.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
+          cfg.webhook.telegram.chatId = process.env.TELEGRAM_CHAT_ID;
+
           fs.writeFileSync(p, JSON.stringify(cfg, null, 4) + '\n');
           NODE
 
@@ -44,6 +56,51 @@ jobs:
           ACCOUNT_1_PROXY_HTTP=false
           ACCOUNT_1_PROXY_URL=socks5://127.0.0.1
           ACCOUNT_1_PROXY_PORT=1080
+
+          ACCOUNT_2_EMAIL=${{ secrets.ACCOUNT_2_EMAIL }}
+          ACCOUNT_2_PASSWORD=${{ secrets.ACCOUNT_2_PASSWORD }}
+          ACCOUNT_2_TOTP_SECRET=${{ secrets.ACCOUNT_2_TOTP_SECRET }}
+          ACCOUNT_2_GEO_LOCALE=VN
+          ACCOUNT_2_LANG_CODE=vi
+          ACCOUNT_2_PROXY_HTTP=false
+          ACCOUNT_2_PROXY_URL=socks5://127.0.0.1
+          ACCOUNT_2_PROXY_PORT=1080
+
+          ACCOUNT_3_EMAIL=${{ secrets.ACCOUNT_3_EMAIL }}
+          ACCOUNT_3_PASSWORD=${{ secrets.ACCOUNT_3_PASSWORD }}
+          ACCOUNT_3_TOTP_SECRET=${{ secrets.ACCOUNT_3_TOTP_SECRET }}
+          ACCOUNT_3_GEO_LOCALE=VN
+          ACCOUNT_3_LANG_CODE=vi
+          ACCOUNT_3_PROXY_HTTP=false
+          ACCOUNT_3_PROXY_URL=socks5://127.0.0.1
+          ACCOUNT_3_PROXY_PORT=1080
+
+          ACCOUNT_4_EMAIL=${{ secrets.ACCOUNT_4_EMAIL }}
+          ACCOUNT_4_PASSWORD=${{ secrets.ACCOUNT_4_PASSWORD }}
+          ACCOUNT_4_TOTP_SECRET=${{ secrets.ACCOUNT_4_TOTP_SECRET }}
+          ACCOUNT_4_GEO_LOCALE=VN
+          ACCOUNT_4_LANG_CODE=vi
+          ACCOUNT_4_PROXY_HTTP=false
+          ACCOUNT_4_PROXY_URL=socks5://127.0.0.1
+          ACCOUNT_4_PROXY_PORT=1080
+
+          ACCOUNT_5_EMAIL=${{ secrets.ACCOUNT_5_EMAIL }}
+          ACCOUNT_5_PASSWORD=${{ secrets.ACCOUNT_5_PASSWORD }}
+          ACCOUNT_5_TOTP_SECRET=${{ secrets.ACCOUNT_5_TOTP_SECRET }}
+          ACCOUNT_5_GEO_LOCALE=VN
+          ACCOUNT_5_LANG_CODE=vi
+          ACCOUNT_5_PROXY_HTTP=false
+          ACCOUNT_5_PROXY_URL=socks5://127.0.0.1
+          ACCOUNT_5_PROXY_PORT=1080
+
+          ACCOUNT_6_EMAIL=${{ secrets.ACCOUNT_6_EMAIL }}
+          ACCOUNT_6_PASSWORD=${{ secrets.ACCOUNT_6_PASSWORD }}
+          ACCOUNT_6_TOTP_SECRET=${{ secrets.ACCOUNT_6_TOTP_SECRET }}
+          ACCOUNT_6_GEO_LOCALE=VN
+          ACCOUNT_6_LANG_CODE=vi
+          ACCOUNT_6_PROXY_HTTP=false
+          ACCOUNT_6_PROXY_URL=socks5://127.0.0.1
+          ACCOUNT_6_PROXY_PORT=1080
           EOF
 
       - name: Start AZDIGI SOCKS5 tunnel
@@ -55,7 +112,6 @@ jobs:
 
       - name: Test AZDIGI SOCKS5 tunnel
         run: |
-          curl --socks5 127.0.0.1:1080 https://api.ipify.org
           curl --socks5 127.0.0.1:1080 https://rewards.bing.com -I
 
       - name: Install dependencies
@@ -67,5 +123,35 @@ jobs:
 
       - name: Run bot
         working-directory: bot
+        id: run_bot
+        continue-on-error: true
         run: |
-          npm start
+          npm start 2>&1 | tee ../bot-run.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Send Telegram summary
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          SUMMARY="$(grep -E 'RUN-END|RECOVERY_ACCOUNT_RESULT|ACCOUNT-ERROR|pointsGained|Completed all accounts' bot-run.log | tail -80)"
+          if [ -z "$SUMMARY" ]; then
+            SUMMARY="$(tail -80 bot-run.log)"
+          fi
+
+          TEXT="Microsoft Rewards run: ${JOB_STATUS}
+          Repo: ${{ github.repository }}
+          Run: ${RUN_URL}
+
+          ${SUMMARY}"
+
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}"
+
+      - name: Fail workflow if bot failed
+        if: steps.run_bot.outcome == 'failure'
+        run: exit 1

@@ -38,6 +38,7 @@ jobs:
           cat > .env <<'EOF'
           ACCOUNT_1_EMAIL=${{ secrets.ACCOUNT_1_EMAIL }}
           ACCOUNT_1_PASSWORD=${{ secrets.ACCOUNT_1_PASSWORD }}
+          ACCOUNT_1_TOTP_SECRET=${{ secrets.ACCOUNT_1_TOTP_SECRET }}
           ACCOUNT_1_GEO_LOCALE=VN
           ACCOUNT_1_LANG_CODE=vi
           ACCOUNT_1_PROXY_HTTP=false

@@ -167,3 +167,19 @@ jobs:
       - name: Fail workflow if bot failed
         if: steps.run_bot.outcome == 'failure'
         run: exit 1
+
+
+# Xóa action sau khi chạy xong
+        permissions:
+  actions: write
+  contents: read
+
+# cuối workflow
+      - name: Delete this workflow run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method DELETE \
+            /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}

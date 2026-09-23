@@ -41,7 +41,7 @@ jobs:
           ACCOUNT_1_GEO_LOCALE=VN
           ACCOUNT_1_LANG_CODE=vi
           ACCOUNT_1_PROXY_HTTP=false
-          ACCOUNT_1_PROXY_URL=127.0.0.1
+          ACCOUNT_1_PROXY_URL=socks5://127.0.0.1
           ACCOUNT_1_PROXY_PORT=1080
           EOF
 
@@ -51,6 +51,11 @@ jobs:
           printf '%s\n' "${{ secrets.AZDIGI_SSH_KEY }}" > ~/.ssh/azdigi_key
           chmod 600 ~/.ssh/azdigi_key
           ssh -o StrictHostKeyChecking=no -f -N -D 127.0.0.1:1080 -p 2210 -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
+
+      - name: Test AZDIGI SOCKS5 tunnel
+        run: |
+          curl --socks5 127.0.0.1:1080 https://api.ipify.org
+          curl --socks5 127.0.0.1:1080 https://rewards.bing.com -I
 
       - name: Install dependencies
         working-directory: bot

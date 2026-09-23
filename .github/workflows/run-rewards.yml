@@ -25,10 +25,17 @@ jobs:
       - name: Create local secrets/config
         working-directory: bot
         run: |
-          if [ ! -f config.json ]; then cp config.example.json config.json; fi
-          if [ ! -f .env ]; then cp env.example .env; fi
+          cp config.example.json config.json
 
-          cat >> .env <<'EOF'
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = 'config.json';
+          const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+          cfg.headless = true;
+          fs.writeFileSync(p, JSON.stringify(cfg, null, 4) + '\n');
+          NODE
+
+          cat > .env <<'EOF'
           ACCOUNT_1_EMAIL=${{ secrets.ACCOUNT_1_EMAIL }}
           ACCOUNT_1_PASSWORD=${{ secrets.ACCOUNT_1_PASSWORD }}
           ACCOUNT_1_GEO_LOCALE=VN

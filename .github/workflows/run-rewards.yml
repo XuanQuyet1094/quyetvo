@@ -175,10 +175,11 @@ jobs:
               if (clean.startsWith('DAILY_SET_URL_DIAGNOSTIC ')) {
                 try {
                   const v = JSON.parse(clean.slice('DAILY_SET_URL_DIAGNOSTIC '.length));
-                  const source = ['dashboard', 'snapshot'].includes(v.source) ? v.source : 'other';
-                  const host = typeof v.host === 'string' && /(^|\\.)bing\\.com$/i.test(v.host) ? v.host : 'other';
+                  const source = ['dom', 'dashboard', 'snapshot'].includes(v.source) ? v.source : 'other';
+                  const host = typeof v.host === 'string' && /(^|\.)bing\.com$/i.test(v.host) ? v.host : 'other';
+                  const matchedBy = typeof v.matchedBy === 'string' && /^[a-z0-9+_-]{1,40}$/i.test(v.matchedBy) ? v.matchedBy : 'other';
                   console.log('Daily Set URL: ' + JSON.stringify({
-                    source, host,
+                    source, host, matchedBy,
                     hasBTDSUOID: v.hasBTDSUOID === true,
                     hasPUBL: v.hasPUBL === true,
                     hasCREA: v.hasCREA === true,

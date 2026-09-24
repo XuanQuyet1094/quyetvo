@@ -186,6 +186,7 @@ jobs:
       - name: Send one Telegram result
         if: ${{ always() }}
         env:
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BOT_OUTCOME: ${{ steps.bot.outcome }}
@@ -203,7 +204,8 @@ jobs:
             let d = {};
             try { d = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json'), 'utf8')); } catch {}
             const text = [
-              'Microsoft Rewards - Account 1',
+              `Microsoft Rewards - ${process.env.ACCOUNT_1_EMAIL?.trim() || 'Account 1'}`,
+              `Run attempt: ${process.env.GITHUB_RUN_ATTEMPT || 'unknown'}`,
               `Status: ${r.status || process.env.BOT_OUTCOME || 'not started'}`,
               `Date: ${r.date || 'unknown'}`,
               `Points gained this run: ${r.pointsEarned ?? 'unknown'}`,

@@ -326,7 +326,7 @@ jobs:
           });
           NODE
 
-      - name: Send one Telegram result
+      - name: Send Telegram summary
         if: ${{ always() }}
         env:
           ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
@@ -338,38 +338,76 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
+
+          function readJson(file) {
+            try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+          }
+
+          function numberOrNull(value) {
+            const n = Number(value);
+            return Number.isFinite(n) ? n : null;
+          }
+
+          function formatDate(value) {
+            if (!value || typeof value !== 'string') return 'không rõ';
+            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+          }
+
           (async () => {
             const token = process.env.TELEGRAM_BOT_TOKEN;
             const chat = process.env.TELEGRAM_CHAT_ID;
             if (!token || !chat) throw new Error('Telegram secrets missing');
-            let r = {};
-            try { r = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'account-result.json'), 'utf8')); } catch {}
-            let d = {};
-            try { d = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json'), 'utf8')); } catch {}
-            const text = [
-              `Microsoft Rewards - ${process.env.ACCOUNT_1_EMAIL?.trim() || 'Account 1'}`,
-              `Run attempt: ${process.env.GITHUB_RUN_ATTEMPT || 'unknown'}`,
-              `Status: ${r.status || process.env.BOT_OUTCOME || 'not started'}`,
-              `Date: ${r.date || 'unknown'}`,
-              `Points gained this run: ${r.pointsEarned ?? 'unknown'}`,
-              `Balance: ${r.initialBalance ?? '?'} -> ${r.finalBalance ?? '?'}`,
-              `Daily completion: ${r.dailyPointsComplete ?? 'unverified'}`,
-              `Daily Set: ${d.dailySet ? d.dailySet.state + ' (' + d.dailySet.completed + '/' + d.dailySet.total + ')' : 'unverified'}`,
-              `Error: ${r.errorCode || (!r.finishedAt ? 'No final account result; check workflow steps' : 'none')}`,
-              `Last stage: ${d.stage || 'not started'}`,
-              `Last login state: ${d.loginState || 'not recorded'}`,
-              `Observed errors: ${(d.errors || []).join(', ') || 'none captured'}`,
-              `Process exit: ${d.exitCode ?? 'unknown'} | Signal: ${d.signal || 'none'}`,
+
+            const result = readJson(path.join(process.env.RUNNER_TEMP, 'account-result.json'));
+            const diagnostic = readJson(path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json'));
+            const email = process.env.ACCOUNT_1_EMAIL?.trim() || 'Tài khoản 1';
+
+            const gained = numberOrNull(result.pointsEarned);
+            const initial = numberOrNull(result.initialBalance);
+            const final = numberOrNull(result.finalBalance);
+            const success = ['success', 'completed'].includes(String(result.status || '').toLowerCase()) &&
+              Number(diagnostic.exitCode ?? 0) === 0;
+            const errorCount = Array.isArray(diagnostic.errors) ? diagnostic.errors.length : 0;
+            const daily = diagnostic.dailySet;
+            const dailyText = daily && Number.isSafeInteger(daily.completed) && Number.isSafeInteger(daily.total)
+              ? `${daily.completed}/${daily.total}${daily.state === 'complete' ? ' ✅' : ''}`
+              : 'chưa xác minh';
+
+            const accountLine = [
+              `• ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
+              initial !== null && final !== null ? `${initial} → ${final}` : null,
+              `Daily Set ${dailyText}`
+            ].filter(Boolean).join(' | ');
+
+            const lines = [
+              '🏆 Microsoft Rewards — Tổng kết',
+              `📅 ${formatDate(result.date)}`,
+              '',
+              `Tổng điểm kiếm được: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
+              'Tài khoản đã xử lý: 1/1',
+              '',
+              accountLine,
+              '',
+              `Trạng thái: ${success ? '✅ Hoàn tất' : '⚠️ Chưa hoàn tất'}`,
+              `Lỗi: ${errorCount === 0 && !result.errorCode ? 'Không' : result.errorCode || diagnostic.errors?.join(', ') || 'Có lỗi'}`,
               process.env.RUN_URL
-            ].join('\n');
+            ];
+
             const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: 'POST', headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({chat_id: chat, text}), signal: AbortSignal.timeout(20000)
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({chat_id: chat, text: lines.join('\n')}),
+              signal: AbortSignal.timeout(20000)
             });
+
             const body = await response.json();
             if (!response.ok || !body.ok) throw new Error('Telegram rejected notification');
-            console.log('Telegram result sent.');
-          })().catch(() => { console.error('Telegram notification failed; check secrets and bot access.'); process.exitCode = 1; });
+            console.log('Telegram summary sent.');
+          })().catch(() => {
+            console.error('Telegram notification failed; check secrets and bot access.');
+            process.exitCode = 1;
+          });
           NODE
 
       - name: Cleanup

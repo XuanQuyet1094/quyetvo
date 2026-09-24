@@ -140,7 +140,7 @@ jobs:
           const log = fs.createWriteStream(path.join(process.env.RUNNER_TEMP, 'bot-private.log'), {mode: 0o600});
           let last = null;
           const diagnosticPath = path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json');
-          const diagnostic = {stage: 'STARTING', loginState: null, errors: [], exitCode: null, signal: null};
+          const diagnostic = {stage: 'STARTING', loginState: null, errors: [], exitCode: null, signal: null, dailySet: null};
           function saveDiagnostic() {
             fs.writeFileSync(diagnosticPath, JSON.stringify(diagnostic), {mode: 0o600});
           }
@@ -148,7 +148,30 @@ jobs:
           // Only fixed labels may leave the runner; never forward arbitrary log text.
           function diagnose(line) {
             const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
+            if (clean.startsWith('DAILY_SET_VERIFICATION ')) {
+              try {
+                const v = JSON.parse(clean.slice('DAILY_SET_VERIFICATION '.length));
+                if (['complete', 'incomplete', 'unverified'].includes(v.state) && [v.total, v.completed, v.remaining].every(n => Number.isSafeInteger(n) && n >= 0)) {
+                  diagnostic.dailySet = {state: v.state, total: v.total, completed: v.completed, remaining: v.remaining};
+                  if (process.env.DEBUG_DAILY_SET === 'true') console.log('Daily Set verification: ' + JSON.stringify(diagnostic.dailySet));
+                }
+              } catch {}
+            }
             if (process.env.DEBUG_DAILY_SET === 'true') {
+              if (clean.startsWith('SERVER_ACTION_DIAGNOSTIC ')) {
+                try {
+                  const v = JSON.parse(clean.slice('SERVER_ACTION_DIAGNOSTIC '.length));
+                  const safe = {};
+                  for (const k of ['length', 'rows', 'decimalTrueRows', 'hexTrueRows', 'falseRows', 'errorRows', 'status']) {
+                    if (Number.isSafeInteger(v[k]) && v[k] >= 0) safe[k] = v[k];
+                  }
+                  for (const k of ['html', 'redirectMarker', 'hasAvailablePoints', 'acknowledged']) safe[k] = v[k] === true;
+                  for (const [k, allowed] of Object.entries({kind: ['string', 'object', 'array', 'null', 'boolean', 'number', 'undefined'], contentType: ['rsc', 'json', 'html', 'other'], route: ['earn', 'dashboard', 'other']})) {
+                    safe[k] = allowed.includes(v[k]) ? v[k] : 'other';
+                  }
+                  console.log('Server action response shape: ' + JSON.stringify(safe));
+                } catch { console.log('Server action diagnostic could not be parsed'); }
+              }
               if (clean.startsWith('DAILY_SET_DIAGNOSTIC ')) {
                 try {
                   const v = JSON.parse(clean.slice('DAILY_SET_DIAGNOSTIC '.length));
@@ -272,6 +295,7 @@ jobs:
               `Points gained this run: ${r.pointsEarned ?? 'unknown'}`,
               `Balance: ${r.initialBalance ?? '?'} -> ${r.finalBalance ?? '?'}`,
               `Daily completion: ${r.dailyPointsComplete ?? 'unverified'}`,
+              `Daily Set: ${d.dailySet ? d.dailySet.state + ' (' + d.dailySet.completed + '/' + d.dailySet.total + ')' : 'unverified'}`,
               `Error: ${r.errorCode || (!r.finishedAt ? 'No final account result; check workflow steps' : 'none')}`,
               `Last stage: ${d.stage || 'not started'}`,
               `Last login state: ${d.loginState || 'not recorded'}`,

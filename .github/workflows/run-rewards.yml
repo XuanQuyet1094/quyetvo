@@ -3,6 +3,18 @@ name: run-rewards
 on:
   workflow_dispatch:
     inputs:
+      account_index:
+        description: 'Select account to run'
+        type: choice
+        required: true
+        default: '1'
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
       debug_daily_set:
         description: 'Show sanitized Daily Set diagnostics'
         type: boolean
@@ -14,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rewards-account-1
+  group: rewards-selected-account
   cancel-in-progress: false
 
 jobs:
@@ -117,25 +129,75 @@ jobs:
               --proxy socks5h://127.0.0.1:1080 "$url" -o /dev/null
           done
 
-      - name: Run account 1
+      - name: Run selected account
         id: bot
         env:
           DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
-          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
-          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
-          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+          SELECTED_ACCOUNT_INDEX: ${{ github.event_name == 'workflow_dispatch' && inputs.account_index || '1' }}
+          SLOT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          SLOT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
+          SLOT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+          SLOT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
+          SLOT_2_PASSWORD: ${{ secrets.ACCOUNT_2_PASSWORD }}
+          SLOT_2_TOTP_SECRET: ${{ secrets.ACCOUNT_2_TOTP_SECRET }}
+          SLOT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
+          SLOT_3_PASSWORD: ${{ secrets.ACCOUNT_3_PASSWORD }}
+          SLOT_3_TOTP_SECRET: ${{ secrets.ACCOUNT_3_TOTP_SECRET }}
+          SLOT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
+          SLOT_4_PASSWORD: ${{ secrets.ACCOUNT_4_PASSWORD }}
+          SLOT_4_TOTP_SECRET: ${{ secrets.ACCOUNT_4_TOTP_SECRET }}
+          SLOT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
+          SLOT_5_PASSWORD: ${{ secrets.ACCOUNT_5_PASSWORD }}
+          SLOT_5_TOTP_SECRET: ${{ secrets.ACCOUNT_5_TOTP_SECRET }}
+          SLOT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
+          SLOT_6_PASSWORD: ${{ secrets.ACCOUNT_6_PASSWORD }}
+          SLOT_6_TOTP_SECRET: ${{ secrets.ACCOUNT_6_TOTP_SECRET }}
           ACCOUNT_1_GEO_LOCALE: VN
           ACCOUNT_1_LANG_CODE: vi
           ACCOUNT_1_PROXY_HTTP: 'true'
           ACCOUNT_1_PROXY_URL: socks5://127.0.0.1
           ACCOUNT_1_PROXY_PORT: '1080'
         run: |
-          : "${ACCOUNT_1_EMAIL:?Missing ACCOUNT_1_EMAIL}"
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
           const readline = require('node:readline');
           const {spawn} = require('node:child_process');
+
+          const selectedIndex = String(process.env.SELECTED_ACCOUNT_INDEX || '1');
+          const slots = Object.fromEntries(
+            [1, 2, 3, 4, 5, 6].map(index => [
+              String(index),
+              {
+                email: process.env[`SLOT_${index}_EMAIL`] || '',
+                password: process.env[`SLOT_${index}_PASSWORD`] || '',
+                totp: process.env[`SLOT_${index}_TOTP_SECRET`] || ''
+              }
+            ])
+          );
+          const selected = slots[selectedIndex];
+          if (!selected || !selected.email.trim()) {
+            console.error(`Selected account ${selectedIndex} is not configured. Add ACCOUNT_${selectedIndex}_EMAIL in repository secrets.`);
+            process.exit(1);
+          }
+
+          const selectedPath = path.join(process.env.RUNNER_TEMP, 'selected-account.json');
+          fs.writeFileSync(
+            selectedPath,
+            JSON.stringify({index: selectedIndex, email: selected.email.trim()}),
+            {mode: 0o600}
+          );
+
+          const childEnv = {
+            ...process.env,
+            ACCOUNT_1_EMAIL: selected.email,
+            ACCOUNT_1_PASSWORD: selected.password,
+            ACCOUNT_1_TOTP_SECRET: selected.totp
+          };
+          for (const key of Object.keys(childEnv)) {
+            if (/^SLOT_[1-6]_/.test(key)) delete childEnv[key];
+          }
+
           const resultPath = path.join(process.env.RUNNER_TEMP, 'account-result.json');
           const log = fs.createWriteStream(path.join(process.env.RUNNER_TEMP, 'bot-private.log'), {mode: 0o600});
           let last = null;
@@ -288,7 +350,7 @@ jobs:
             }
             saveDiagnostic();
           }
-          const child = spawn('npm', ['start'], {stdio: ['ignore', 'pipe', 'pipe']});
+          const child = spawn('npm', ['start'], {stdio: ['ignore', 'pipe', 'pipe'], env: childEnv});
           function consume(stream) {
             readline.createInterface({input: stream}).on('line', line => {
               log.write(line + '\n');
@@ -307,7 +369,7 @@ jobs:
           }
           consume(child.stdout);
           consume(child.stderr);
-          const heartbeat = setInterval(() => console.log('Account 1: still running; private logs are not published.'), 60000);
+          const heartbeat = setInterval(() => console.log(`Selected account ${selectedIndex}: still running; private logs are not published.`), 60000);
           child.on('error', () => {
             diagnostic.errors.push('BOT_PROCESS_START_FAILED');
             saveDiagnostic();
@@ -322,7 +384,7 @@ jobs:
             clearInterval(heartbeat);
             log.end();
             const failed = !last || !['success', 'completed'].includes(last.status);
-            console.log('Account 1 finished; detailed result will be sent privately.');
+            console.log(`Selected account ${selectedIndex} finished; detailed result will be sent privately.`);
             process.exitCode = code === 0 && !failed ? 0 : 1;
           });
           NODE
@@ -330,7 +392,6 @@ jobs:
       - name: Send Telegram summary
         if: ${{ always() }}
         env:
-          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BOT_OUTCOME: ${{ steps.bot.outcome }}
@@ -362,7 +423,9 @@ jobs:
 
             const result = readJson(path.join(process.env.RUNNER_TEMP, 'account-result.json'));
             const diagnostic = readJson(path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json'));
-            const email = process.env.ACCOUNT_1_EMAIL?.trim() || 'Tài khoản 1';
+            const selectedAccount = readJson(path.join(process.env.RUNNER_TEMP, 'selected-account.json'));
+            const accountIndex = String(selectedAccount.index || '?');
+            const email = String(selectedAccount.email || `Tài khoản ${accountIndex}`);
 
             const gained = numberOrNull(result.pointsEarned);
             const initial = numberOrNull(result.initialBalance);
@@ -376,7 +439,7 @@ jobs:
               : 'chưa xác minh';
 
             const accountLine = [
-              `• ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
+              `• Tài khoản ${accountIndex} — ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
               initial !== null && final !== null ? `${initial} → ${final}` : null,
               `Daily Set ${dailyText}`
             ].filter(Boolean).join(' | ');
@@ -417,4 +480,4 @@ jobs:
           if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
             ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p 2210 labotecc@hv42-25048.azdigihost.com || true
           fi
-          rm -f ~/.ssh/azdigi_key .env config.json "$RUNNER_TEMP/bot-private.log" "$RUNNER_TEMP/account-result.json" "$RUNNER_TEMP/account-diagnostic.json"
+          rm -f ~/.ssh/azdigi_key .env config.json "$RUNNER_TEMP/bot-private.log" "$RUNNER_TEMP/account-result.json" "$RUNNER_TEMP/account-diagnostic.json" "$RUNNER_TEMP/selected-account.json"

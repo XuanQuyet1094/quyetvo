@@ -158,6 +158,13 @@ jobs:
               } catch {}
             }
             if (process.env.DEBUG_DAILY_SET === 'true') {
+              if (clean.startsWith('LOGIN_ALERT_DIAGNOSTIC ')) {
+                try {
+                  const v = JSON.parse(clean.slice('LOGIN_ALERT_DIAGNOSTIC '.length));
+                  const safe = {persistent: v.persistent === true, textAvailable: v.textAvailable === true};
+                  console.log('Login alert diagnostic: ' + JSON.stringify(safe));
+                } catch { console.log('Login alert diagnostic could not be parsed'); }
+              }
               if (clean.startsWith('SERVER_ACTION_DIAGNOSTIC ')) {
                 try {
                   const v = JSON.parse(clean.slice('SERVER_ACTION_DIAGNOSTIC '.length));
@@ -213,7 +220,7 @@ jobs:
             }
             const stage = clean.match(/\[(BROWSER|SESSION|LOGIN|LOGIN-ENTER-EMAIL|LOGIN-ENTER-PASSWORD|DAILY-SET|READ-TO-EARN|SEARCH-MANAGER|SEARCH-BING)\]/)?.[1];
             if (stage) diagnostic.stage = stage;
-            const state = clean.match(/State transition: [A-Z_]+\s*\u2192\s*(EMAIL_INPUT|FOOTER_ACTION|PASSWORD_INPUT|KMSI_PROMPT|ERROR_ALERT|EMAIL_VERIFICATION_INPUT|TOTP_INPUT|OTP_INPUT)\b/)?.[1];
+            const state = clean.match(/State transition: [A-Z_]+\s*\u2192\s*(EMAIL_INPUT|FOOTER_ACTION|PASSWORD_INPUT|KMSI_PROMPT|ERROR_ALERT|EMAIL_VERIFICATION_INPUT|RECOVERY_EMAIL_INPUT|SIGN_IN_METHOD_PICKER|2FA_TOTP|LOGIN_PASSWORDLESS|PASSWORDLESS_SEND_CODE|OTP_CODE_ENTRY|PASSKEY_ERROR|PASSKEY_VIDEO|ACCOUNT_LOCKED|LOGGED_IN|UNKNOWN|CHROMEWEBDATA_ERROR)\b/)?.[1];
             if (state) diagnostic.loginState = state;
             const patterns = [
               [/net::ERR_EMPTY_RESPONSE/, 'ERR_EMPTY_RESPONSE'],
@@ -223,6 +230,8 @@ jobs:
               [/net::ERR_NAME_NOT_RESOLVED/, 'ERR_NAME_NOT_RESOLVED'],
               [/net::ERR_CONNECTION_RESET/, 'ERR_CONNECTION_RESET'],
               [/Microsoft login error: Unknown Error/, 'MICROSOFT_LOGIN_UNKNOWN_ERROR'],
+              [/Microsoft login error:/, 'MICROSOFT_LOGIN_ERROR'],
+              [/Login alert disappeared before handling/, 'TRANSIENT_LOGIN_ALERT'],
               [/Password input detected but no password is configured/, 'PASSWORD_NOT_CONFIGURED'],
               [/Executable doesn't exist/, 'BROWSER_EXECUTABLE_MISSING'],
               [/error while loading shared libraries/, 'BROWSER_LIBRARY_MISSING'],

@@ -126,7 +126,7 @@ jobs:
           ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
           ACCOUNT_1_GEO_LOCALE: VN
           ACCOUNT_1_LANG_CODE: vi
-          ACCOUNT_1_PROXY_HTTP: 'false'
+          ACCOUNT_1_PROXY_HTTP: 'true'
           ACCOUNT_1_PROXY_URL: socks5://127.0.0.1
           ACCOUNT_1_PROXY_PORT: '1080'
         run: |

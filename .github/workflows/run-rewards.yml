@@ -172,6 +172,20 @@ jobs:
                   console.log('Server action response shape: ' + JSON.stringify(safe));
                 } catch { console.log('Server action diagnostic could not be parsed'); }
               }
+              if (clean.startsWith('DAILY_SET_URL_DIAGNOSTIC ')) {
+                try {
+                  const v = JSON.parse(clean.slice('DAILY_SET_URL_DIAGNOSTIC '.length));
+                  const source = ['dashboard', 'snapshot'].includes(v.source) ? v.source : 'other';
+                  const host = typeof v.host === 'string' && /(^|\\.)bing\\.com$/i.test(v.host) ? v.host : 'other';
+                  console.log('Daily Set URL: ' + JSON.stringify({
+                    source, host,
+                    hasBTDSUOID: v.hasBTDSUOID === true,
+                    hasPUBL: v.hasPUBL === true,
+                    hasCREA: v.hasCREA === true,
+                    hasRnoreward: v.hasRnoreward === true
+                  }));
+                } catch { console.log('Daily Set URL diagnostic could not be parsed'); }
+              }
               if (clean.startsWith('DAILY_SET_DIAGNOSTIC ')) {
                 try {
                   const v = JSON.parse(clean.slice('DAILY_SET_DIAGNOSTIC '.length));

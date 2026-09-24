@@ -202,11 +202,44 @@ jobs:
                     groups: (Array.isArray(v.groups) ? v.groups : []).slice(0, 14).map(g => ({date: date(g.date), total: Number(g.total), incomplete: Number(g.incomplete), pendingWithPoints: Number(g.pendingWithPoints)}))}));
                 } catch { console.log('Daily Set diagnostic could not be parsed'); }
               }
-              const tag = clean.match(/\[(DAILY-SET|ACTIVITY|URL-REWARD|GET-DASHBOARD-DATA|REACT-PARSE)\]/)?.[1];
+              if (clean.startsWith('MORE_PROMOTIONS_DIAGNOSTIC ')) {
+                try {
+                  const v = JSON.parse(clean.slice('MORE_PROMOTIONS_DIAGNOSTIC '.length));
+                  const allowedPools = ['morePromotions', 'morePromotionsWithoutPromotionalItems', 'promotionalItem', 'promotionalItems'];
+                  const allowedKinds = ['mid_week_puzzle', 'puzzle', 'trivia', 'quote', 'wallpaper', 'sea_of_thieves', 'search_bar', 'referral', 'artist', 'birds', 'other'];
+                  const allowedTypes = ['urlreward', 'quiz', 'poll', 'search', 'other', 'none'];
+                  const allowedReasons = ['actionable', 'complete', 'no-points', 'locked', 'missing-type', 'negative-priority', 'promotional'];
+                  const counts = {};
+                  for (const pool of allowedPools) {
+                    const n = Number(v.counts?.[pool]);
+                    counts[pool] = Number.isSafeInteger(n) && n >= 0 ? n : 0;
+                  }
+                  const items = (Array.isArray(v.items) ? v.items : []).slice(0, 40).map(item => ({
+                    pool: allowedPools.includes(item.pool) ? item.pool : 'other',
+                    titleKind: allowedKinds.includes(item.titleKind) ? item.titleKind : 'other',
+                    complete: item.complete === true,
+                    pointProgress: Number.isSafeInteger(Number(item.pointProgress)) ? Number(item.pointProgress) : 0,
+                    pointProgressMax: Number.isSafeInteger(Number(item.pointProgressMax)) ? Number(item.pointProgressMax) : 0,
+                    type: allowedTypes.includes(item.type) ? item.type : 'other',
+                    locked: item.locked === true,
+                    promotional: item.promotional === true,
+                    priority: Number.isSafeInteger(Number(item.priority)) ? Number(item.priority) : 0,
+                    actionable: item.actionable === true,
+                    reason: allowedReasons.includes(item.reason) ? item.reason : 'other'
+                  }));
+                  console.log('More Promotions pools: ' + JSON.stringify({
+                    partialDashboard: v.partialDashboard === true,
+                    counts,
+                    items
+                  }));
+                } catch { console.log('More Promotions diagnostic could not be parsed'); }
+              }
+              const tag = clean.match(/\[(DAILY-SET|MORE-PROMOTIONS|ACTIVITY|URL-REWARD|GET-DASHBOARD-DATA|REACT-PARSE)\]/)?.[1];
               if (tag) {
                 const labels = [
                   ['All "Daily Set" items have already been completed', 'NO_PENDING_ITEMS'],
                   ['Started solving', 'STARTED'], ['Finished processing', 'FINISHED_PROCESSING'],
+                  ['All "More Promotions" items have already been completed', 'NO_MORE_PROMOTIONS_PENDING'],
                   ['Found activity type "UrlReward"', 'URL_REWARD_SELECTED'],
                   ['Starting UrlReward', 'URL_REWARD_STARTED'], ['Completed UrlReward', 'URL_REWARD_COMPLETED'],
                   ['Retrying UrlReward once', 'URL_REWARD_RETRY'],

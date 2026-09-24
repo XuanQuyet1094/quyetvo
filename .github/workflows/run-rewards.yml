@@ -207,7 +207,9 @@ jobs:
                 const labels = [
                   ['All "Daily Set" items have already been completed', 'NO_PENDING_ITEMS'],
                   ['Started solving', 'STARTED'], ['Finished processing', 'FINISHED_PROCESSING'],
+                  ['Found activity type "UrlReward"', 'URL_REWARD_SELECTED'],
                   ['Starting UrlReward', 'URL_REWARD_STARTED'], ['Completed UrlReward', 'URL_REWARD_COMPLETED'],
+                  ['Retrying UrlReward once', 'URL_REWARD_RETRY'],
                   ['credited no points', 'NO_POINTS_CREDITED'], ['not acknowledged', 'NOT_ACKNOWLEDGED'],
                   ['not reportable', 'NOT_REPORTABLE'], ['not present in page snapshot', 'OFFER_NOT_FOUND'],
                   ['not discovered in bundle', 'ACTION_NOT_FOUND'], ['unsupported type', 'UNSUPPORTED_TYPE'],

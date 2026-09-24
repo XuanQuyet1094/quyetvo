@@ -205,7 +205,7 @@ jobs:
               if (clean.startsWith('MORE_PROMOTIONS_DIAGNOSTIC ')) {
                 try {
                   const v = JSON.parse(clean.slice('MORE_PROMOTIONS_DIAGNOSTIC '.length));
-                  const allowedPools = ['morePromotions', 'morePromotionsWithoutPromotionalItems', 'promotionalItem', 'promotionalItems'];
+                  const allowedPools = ['morePromotions', 'morePromotionsWithoutPromotionalItems', 'promotionalItem', 'promotionalItems', 'reactSnapshot'];
                   const allowedKinds = ['mid_week_puzzle', 'puzzle', 'trivia', 'quote', 'wallpaper', 'sea_of_thieves', 'search_bar', 'referral', 'artist', 'birds', 'other'];
                   const allowedTypes = ['urlreward', 'quiz', 'poll', 'search', 'other', 'none'];
                   const allowedReasons = ['actionable', 'complete', 'no-points', 'locked', 'missing-type', 'negative-priority', 'promotional'];
@@ -240,6 +240,7 @@ jobs:
                   ['All "Daily Set" items have already been completed', 'NO_PENDING_ITEMS'],
                   ['Started solving', 'STARTED'], ['Finished processing', 'FINISHED_PROCESSING'],
                   ['All "More Promotions" items have already been completed', 'NO_MORE_PROMOTIONS_PENDING'],
+                  ['Recovered React-only point activity', 'REACT_ONLY_RECOVERED'],
                   ['Found activity type "UrlReward"', 'URL_REWARD_SELECTED'],
                   ['Starting UrlReward', 'URL_REWARD_STARTED'], ['Completed UrlReward', 'URL_REWARD_COMPLETED'],
                   ['Retrying UrlReward once', 'URL_REWARD_RETRY'],

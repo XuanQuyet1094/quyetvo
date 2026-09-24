@@ -2,6 +2,11 @@ name: run-rewards
 
 on:
   workflow_dispatch:
+    inputs:
+      debug_daily_set:
+        description: 'Show sanitized Daily Set diagnostics'
+        type: boolean
+        default: true
   schedule:
     - cron: "15 0 * * *"
 
@@ -32,6 +37,36 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+
+      - name: Instrument Daily Set diagnostics
+        env:
+          DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
+        run: |
+          node <<'NODE'
+          if (process.env.DEBUG_DAILY_SET !== 'true') process.exit(0);
+          const fs = require('node:fs');
+          const p = 'src/functions/activities/rewards/DailySet.ts';
+          const source = fs.readFileSync(p, 'utf8');
+          const anchor = 'const today = this.bot.utils.getFormattedDate()';
+          if (source.split(anchor).length !== 2) throw new Error('Daily Set source changed; diagnostic patch needs review');
+          const extra = `
+                  const groups = data.dashboard.dailySetPromotions ?? {}
+                  const safeDates = Object.keys(groups).filter(key => /^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(key))
+                  console.log('DAILY_SET_DIAGNOSTIC ' + JSON.stringify({
+                      utcNow: new Date().toISOString(),
+                      machineDate: today,
+                      vietnamDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()),
+                      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      partialDashboard: this.bot.browser.func.isUsingPartialDashboard(),
+                      selectedDatePresent: Object.prototype.hasOwnProperty.call(groups, today),
+                      totalDateKeys: Object.keys(groups).length,
+                      groups: safeDates.map(date => ({date, total: groups[date]!.length,
+                          incomplete: groups[date]!.filter(item => !item.complete).length,
+                          pendingWithPoints: groups[date]!.filter(item => !item.complete && item.pointProgressMax > 0).length}))
+                  }))
+          `;
+          fs.writeFileSync(p, source.replace(anchor, anchor + extra));
+          NODE
 
       - name: Install and build
         run: |
@@ -85,6 +120,7 @@ jobs:
       - name: Run account 1
         id: bot
         env:
+          DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
           ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
           ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
           ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
@@ -112,6 +148,31 @@ jobs:
           // Only fixed labels may leave the runner; never forward arbitrary log text.
           function diagnose(line) {
             const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
+            if (process.env.DEBUG_DAILY_SET === 'true') {
+              if (clean.startsWith('DAILY_SET_DIAGNOSTIC ')) {
+                try {
+                  const v = JSON.parse(clean.slice('DAILY_SET_DIAGNOSTIC '.length));
+                  const date = value => typeof value === 'string' && /^[0-9TZ:./+-]+$/.test(value) ? value : '?';
+                  console.log('Daily Set dates: ' + JSON.stringify({utc: date(v.utcNow), machine: date(v.machineDate), vietnam: date(v.vietnamDate), partialDashboard: v.partialDashboard === true, selectedDatePresent: v.selectedDatePresent === true,
+                    groups: (Array.isArray(v.groups) ? v.groups : []).slice(0, 14).map(g => ({date: date(g.date), total: Number(g.total), incomplete: Number(g.incomplete), pendingWithPoints: Number(g.pendingWithPoints)}))}));
+                } catch { console.log('Daily Set diagnostic could not be parsed'); }
+              }
+              const tag = clean.match(/\[(DAILY-SET|ACTIVITY|URL-REWARD|GET-DASHBOARD-DATA|REACT-PARSE)\]/)?.[1];
+              if (tag) {
+                const labels = [
+                  ['All "Daily Set" items have already been completed', 'NO_PENDING_ITEMS'],
+                  ['Started solving', 'STARTED'], ['Finished processing', 'FINISHED_PROCESSING'],
+                  ['Starting UrlReward', 'URL_REWARD_STARTED'], ['Completed UrlReward', 'URL_REWARD_COMPLETED'],
+                  ['credited no points', 'NO_POINTS_CREDITED'], ['not acknowledged', 'NOT_ACKNOWLEDGED'],
+                  ['not reportable', 'NOT_REPORTABLE'], ['not present in page snapshot', 'OFFER_NOT_FOUND'],
+                  ['not discovered in bundle', 'ACTION_NOT_FOUND'], ['unsupported type', 'UNSUPPORTED_TYPE'],
+                  ['disabled in config', 'DISABLED'], ['using Bing flyout fallback', 'FALLBACK_SELECTED'],
+                  ['Using partial Bing flyout dashboard', 'PARTIAL_DASHBOARD'], ['Error in doUrlReward', 'URL_REWARD_ERROR']
+                ].filter(([needle]) => clean.includes(needle)).map(([, label]) => label);
+                const counts = [...clean.matchAll(/\b(remaining|offers|reportable|streaks|pointsGained|currentBalance|expected|status)=(-?\d+)\b/g)].map(m => m[1] + '=' + m[2]);
+                console.log('[Diagnostic][' + tag + '] ' + [...labels, ...counts].join(' '));
+              }
+            }
             const stage = clean.match(/\[(BROWSER|SESSION|LOGIN|LOGIN-ENTER-EMAIL|LOGIN-ENTER-PASSWORD|DAILY-SET|READ-TO-EARN|SEARCH-MANAGER|SEARCH-BING)\]/)?.[1];
             if (stage) diagnostic.stage = stage;
             const state = clean.match(/State transition: [A-Z_]+\s*\u2192\s*(EMAIL_INPUT|FOOTER_ACTION|PASSWORD_INPUT|KMSI_PROMPT|ERROR_ALERT|EMAIL_VERIFICATION_INPUT|TOTP_INPUT|OTP_INPUT)\b/)?.[1];

@@ -6,6 +6,12 @@ on:
       account:
         type: number
         required: true
+      run_mode:
+        type: string
+        required: true
+      run_date:
+        type: string
+        required: true
       debug_daily_set:
         type: boolean
         default: false
@@ -27,6 +33,8 @@ jobs:
       run:
         shell: bash
     env:
+      RUN_MODE: ${{ inputs.run_mode }}
+      RUN_DATE: ${{ inputs.run_date }}
       ACCOUNT_SLOT: ${{ inputs.account }}
       BOT_DIR: ${{ github.workspace }}/bot
       REPORT_PATH: ${{ github.workspace }}/rewards-result.json
@@ -44,7 +52,14 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Check and reserve daily attempt in private state
+        id: claim
+        env:
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+        run: node automation/.github/scripts/rewards-state.cjs claim
+
       - name: Checkout private v4 source
+        if: ${{ steps.claim.outputs.run == 'true' }}
         uses: actions/checkout@v4
         with:
           repository: XuanQuyet1094/Microsoft-Rewards-Script
@@ -54,6 +69,7 @@ jobs:
           persist-credentials: false
 
       - name: Install browser and build
+        if: ${{ steps.claim.outputs.run == 'true' }}
         timeout-minutes: 15
         working-directory: bot
         run: |
@@ -63,9 +79,11 @@ jobs:
           test -f dist/index.js
 
       - name: Configure single-account run
+        if: ${{ steps.claim.outputs.run == 'true' }}
         run: node automation/.github/scripts/rewards-runner.cjs configure
 
       - name: Start verified AZDIGI SOCKS5 tunnel
+        if: ${{ steps.claim.outputs.run == 'true' }}
         timeout-minutes: 3
         env:
           AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
@@ -92,6 +110,7 @@ jobs:
           done
 
       - name: Run selected account (maximum 75 minutes)
+        if: ${{ steps.claim.outputs.run == 'true' }}
         id: bot
         continue-on-error: true
         env:
@@ -101,9 +120,17 @@ jobs:
           ACCOUNT_RECOVERY_EMAIL: ${{ secrets[format('ACCOUNT_{0}_RECOVERY_EMAIL', inputs.account)] }}
         run: node automation/.github/scripts/rewards-runner.cjs run
 
+      - name: Persist minimal private result
+        if: ${{ always() && steps.claim.outputs.run == 'true' }}
+        env:
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+          STATE_STORED: ${{ steps.claim.outputs.stored }}
+          JOB_STATUS: ${{ job.status }}
+        run: node automation/.github/scripts/rewards-state.cjs finish
+
       - name: Send one account report to Telegram
         id: report
-        if: ${{ always() }}
+        if: ${{ always() && steps.claim.outputs.run == 'true' }}
         env:
           ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -123,10 +150,9 @@ jobs:
           rm -rf "$BOT_DIR/sessions" "$BOT_DIR/diagnostics" "$RUNNER_TEMP/rewards-private"
 
       - name: Random rest before next account
-        if: ${{ !cancelled() && inputs.account < 6 }}
+        if: ${{ !cancelled() && steps.claim.outputs.run == 'true' && inputs.account < 6 }}
         run: node automation/.github/scripts/rewards-runner.cjs rest
 
       - name: Preserve bot failure status
         if: ${{ !cancelled() && steps.bot.outcome == 'failure' }}
         run: exit 1
-

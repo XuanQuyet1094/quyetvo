@@ -166,7 +166,7 @@ function accountMessage(r, email, url) {
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
   const lines = [
     '<b>MICROSOFT REWARDS</b>',
-    `<b>Báo cáo tài khoản ${r.accountId}/6</b>`,
+    `<b>${process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
     `<code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `${html(r.date)} · Giờ Việt Nam`, '',
     `<b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
@@ -220,14 +220,15 @@ function summaryMessage(jobs, env = process.env) {
   };
   const points = sum('pointsEarned'), initial = sum('initialBalance'), final = sum('finalBalance');
   const completed = rows.filter(({r}) => r?.status === 'completed').length;
-  const lines = ['<b>MICROSOFT REWARDS</b>', '<b>Tổng kết 6 tài khoản</b>', `${dateVN()} · Giờ Việt Nam`, '',
+  const lines = ['<b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'retry' ? '<b>Tổng kết lượt dự phòng</b>' : '<b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
     `<b>Điểm ghi nhận:</b> ${points.n ? gain(points.total) : 'Chưa xác minh'} (${points.n}/6 tài khoản có số liệu)`,
     `<b>Kết thúc thành công:</b> ${completed}/6`,
     `<b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
-    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : 'Không có kết quả');
+    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
   }
+  if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
   lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',
     `<a href="${html(env.RUN_URL)}">Xem lượt chạy GitHub</a>`);
   return lines.join('\n');

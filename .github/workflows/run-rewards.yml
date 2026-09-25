@@ -3,12 +3,18 @@ name: run-rewards
 on:
   workflow_dispatch:
     inputs:
+      run_mode:
+        description: Morning run or retry only eligible failures today
+        type: choice
+        options: [morning, retry]
+        default: morning
       debug_daily_set:
         description: Show sanitized Daily Set diagnostics
         type: boolean
         default: false
   schedule:
-    - cron: '0 0 * * *' # 07:00 Asia/Ho_Chi_Minh; GitHub may queue the run.
+    - cron: '0 0 * * *' # 07:00 Vietnam
+    - cron: '0 8 * * *' # 15:00 Vietnam: retry technical failures only
 
 permissions:
   contents: read
@@ -18,67 +24,102 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+      mode: ${{ steps.plan.outputs.mode }}
+    steps:
+      - name: Select Vietnam date and run mode
+        id: plan
+        env:
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MODE: ${{ inputs.run_mode }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const date = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+          const mode = process.env.EVENT_SCHEDULE === '0 8 * * *' ? 'retry' : (process.env.INPUT_MODE || 'morning');
+          if (!['morning', 'retry'].includes(mode)) throw new Error('Invalid mode');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'date=' + date + '\nmode=' + mode + '\n');
+          NODE
+
   account_1:
     name: Account 1/6
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 1
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   account_2:
     name: Account 2/6
-    needs: account_1
-    if: ${{ !cancelled() }}
+    needs: [plan, account_1]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 2
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   account_3:
     name: Account 3/6
-    needs: account_2
-    if: ${{ !cancelled() }}
+    needs: [plan, account_2]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 3
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   account_4:
     name: Account 4/6
-    needs: account_3
-    if: ${{ !cancelled() }}
+    needs: [plan, account_3]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 4
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   account_5:
     name: Account 5/6
-    needs: account_4
-    if: ${{ !cancelled() }}
+    needs: [plan, account_4]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 5
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   account_6:
     name: Account 6/6
-    needs: account_5
-    if: ${{ !cancelled() }}
+    needs: [plan, account_5]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 6
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit
 
   summary:
     name: Daily Telegram summary
-    needs: [account_1, account_2, account_3, account_4, account_5, account_6]
+    needs: [plan, account_1, account_2, account_3, account_4, account_5, account_6]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -93,6 +134,9 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_MODE: ${{ needs.plan.outputs.mode }}
+          RUN_DATE: ${{ needs.plan.outputs.date }}
+          STATE_ENABLED: ${{ secrets.REWARDS_STATE_TOKEN != '' && 'true' || 'false' }}
           JOB_RESULTS: ${{ toJSON(needs) }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
@@ -102,4 +146,3 @@ jobs:
           ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
           ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
         run: node .github/scripts/rewards-runner.cjs summary
-

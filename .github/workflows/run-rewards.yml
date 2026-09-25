@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       debug_daily_set:
-        description: 'Show sanitized Daily Set diagnostics'
+        description: Show sanitized Daily Set diagnostics
         type: boolean
-        default: true
+        default: false
   schedule:
-    - cron: "15 0 * * *"
+    - cron: '0 0 * * *' # 07:00 Asia/Ho_Chi_Minh; GitHub may queue the run.
 
 permissions:
   contents: read
@@ -18,480 +18,88 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  run:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Checkout private source
-        uses: actions/checkout@v4
-        with:
-          repository: XuanQuyet1094/Microsoft-Rewards-Script
-          ref: v4
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          persist-credentials: false
+  account_1:
+    name: Account 1/6
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+  account_2:
+    name: Account 2/6
+    needs: account_1
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 2
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_3:
+    name: Account 3/6
+    needs: account_2
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 3
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_4:
+    name: Account 4/6
+    needs: account_3
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 4
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_5:
+    name: Account 5/6
+    needs: account_4
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 5
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_6:
+    name: Account 6/6
+    needs: account_5
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 6
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  summary:
+    name: Daily Telegram summary
+    needs: [account_1, account_2, account_3, account_4, account_5, account_6]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
-
-      - name: Instrument Daily Set diagnostics
-        env:
-          DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
-        run: |
-          node <<'NODE'
-          if (process.env.DEBUG_DAILY_SET !== 'true') process.exit(0);
-          const fs = require('node:fs');
-          const p = 'src/functions/activities/rewards/DailySet.ts';
-          const source = fs.readFileSync(p, 'utf8');
-          const anchor = 'const today = this.bot.utils.getFormattedDate()';
-          if (source.split(anchor).length !== 2) throw new Error('Daily Set source changed; diagnostic patch needs review');
-          const extra = `
-                  const groups = data.dashboard.dailySetPromotions ?? {}
-                  const safeDates = Object.keys(groups).filter(key => /^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(key))
-                  console.log('DAILY_SET_DIAGNOSTIC ' + JSON.stringify({
-                      utcNow: new Date().toISOString(),
-                      machineDate: today,
-                      vietnamDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()),
-                      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                      partialDashboard: this.bot.browser.func.isUsingPartialDashboard(),
-                      selectedDatePresent: Object.prototype.hasOwnProperty.call(groups, today),
-                      totalDateKeys: Object.keys(groups).length,
-                      groups: safeDates.map(date => ({date, total: groups[date]!.length,
-                          incomplete: groups[date]!.filter(item => !item.complete).length,
-                          pendingWithPoints: groups[date]!.filter(item => !item.complete && item.pointProgressMax > 0).length}))
-                  }))
-          `;
-          fs.writeFileSync(p, source.replace(anchor, anchor + extra));
-          NODE
-
-      - name: Install and build
-        run: |
-          npm ci --include=dev
-          npx --no-install patchright install --with-deps chromium
-          npm run build
-          test -f dist/index.js
-
-      - name: Configure headless browser
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const cfg = JSON.parse(fs.readFileSync('config.example.json', 'utf8'));
-          cfg.headless = true;
-          cfg.clusters = 1;
-          cfg.accountDelay = {min: '2min', max: '2min'};
-          cfg.errorDiagnostics = false;
-          cfg.debugLogs = false;
-          for (const name of ['telegram', 'discord', 'ntfy']) {
-            if (cfg.webhook?.[name]) cfg.webhook[name].enabled = false;
-          }
-          fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2) + '\n', {mode: 0o600});
-          // Account credentials are provided through the process environment.
-          fs.writeFileSync('.env', '', {mode: 0o600});
-          NODE
-
-      - name: Start and check SOCKS5
-        env:
-          AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
-          AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
-        run: |
-          : "${AZDIGI_SSH_KEY:?Missing AZDIGI_SSH_KEY}"
-          : "${AZDIGI_KNOWN_HOSTS:?Missing AZDIGI_KNOWN_HOSTS}"
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$AZDIGI_SSH_KEY" | tr -d '\r' > ~/.ssh/azdigi_key
-          printf '%s\n' "$AZDIGI_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/azdigi_key ~/.ssh/known_hosts
-          ssh-keygen -y -P '' -f ~/.ssh/azdigi_key >/dev/null
-          ssh -M -S "$RUNNER_TEMP/azdigi.sock" \
-            -o StrictHostKeyChecking=yes -o BatchMode=yes \
-            -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
-            -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=3 \
-            -f -N -D 127.0.0.1:1080 -p 2210 \
-            -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
-          for url in https://rewards.bing.com/ https://www.bing.com/; do
-            curl --fail --silent --show-error --location \
-              --connect-timeout 15 --max-time 45 \
-              --proxy socks5h://127.0.0.1:1080 "$url" -o /dev/null
-          done
-
-      - name: Run accounts 1 to 6
-        id: bot
-        env:
-          DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
-          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
-          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
-          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
-          ACCOUNT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
-          ACCOUNT_2_PASSWORD: ${{ secrets.ACCOUNT_2_PASSWORD }}
-          ACCOUNT_2_TOTP_SECRET: ${{ secrets.ACCOUNT_2_TOTP_SECRET }}
-          ACCOUNT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
-          ACCOUNT_3_PASSWORD: ${{ secrets.ACCOUNT_3_PASSWORD }}
-          ACCOUNT_3_TOTP_SECRET: ${{ secrets.ACCOUNT_3_TOTP_SECRET }}
-          ACCOUNT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
-          ACCOUNT_4_PASSWORD: ${{ secrets.ACCOUNT_4_PASSWORD }}
-          ACCOUNT_4_TOTP_SECRET: ${{ secrets.ACCOUNT_4_TOTP_SECRET }}
-          ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
-          ACCOUNT_5_PASSWORD: ${{ secrets.ACCOUNT_5_PASSWORD }}
-          ACCOUNT_5_TOTP_SECRET: ${{ secrets.ACCOUNT_5_TOTP_SECRET }}
-          ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
-          ACCOUNT_6_PASSWORD: ${{ secrets.ACCOUNT_6_PASSWORD }}
-          ACCOUNT_6_TOTP_SECRET: ${{ secrets.ACCOUNT_6_TOTP_SECRET }}
-          ACCOUNT_1_GEO_LOCALE: VN
-          ACCOUNT_1_LANG_CODE: vi
-          ACCOUNT_1_PROXY_HTTP: 'true'
-          ACCOUNT_1_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_1_PROXY_PORT: '1080'
-          ACCOUNT_2_GEO_LOCALE: VN
-          ACCOUNT_2_LANG_CODE: vi
-          ACCOUNT_2_PROXY_HTTP: 'true'
-          ACCOUNT_2_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_2_PROXY_PORT: '1080'
-          ACCOUNT_3_GEO_LOCALE: VN
-          ACCOUNT_3_LANG_CODE: vi
-          ACCOUNT_3_PROXY_HTTP: 'true'
-          ACCOUNT_3_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_3_PROXY_PORT: '1080'
-          ACCOUNT_4_GEO_LOCALE: VN
-          ACCOUNT_4_LANG_CODE: vi
-          ACCOUNT_4_PROXY_HTTP: 'true'
-          ACCOUNT_4_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_4_PROXY_PORT: '1080'
-          ACCOUNT_5_GEO_LOCALE: VN
-          ACCOUNT_5_LANG_CODE: vi
-          ACCOUNT_5_PROXY_HTTP: 'true'
-          ACCOUNT_5_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_5_PROXY_PORT: '1080'
-          ACCOUNT_6_GEO_LOCALE: VN
-          ACCOUNT_6_LANG_CODE: vi
-          ACCOUNT_6_PROXY_HTTP: 'true'
-          ACCOUNT_6_PROXY_URL: socks5://127.0.0.1
-          ACCOUNT_6_PROXY_PORT: '1080'
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const readline = require('node:readline');
-          const {spawn} = require('node:child_process');
-
-          const configuredAccounts = [1, 2, 3, 4, 5, 6].map(index => ({
-            index: String(index),
-            email: String(process.env[`ACCOUNT_${index}_EMAIL`] || '').trim()
-          }));
-          const missing = configuredAccounts.filter(account => !account.email);
-          if (missing.length) {
-            console.error('Missing repository secrets for account slots: ' + missing.map(account => account.index).join(', '));
-            process.exit(1);
-          }
-
-          const accountMetaPath = path.join(process.env.RUNNER_TEMP, 'account-emails.json');
-          fs.writeFileSync(accountMetaPath, JSON.stringify(configuredAccounts), {mode: 0o600});
-
-          const resultsPath = path.join(process.env.RUNNER_TEMP, 'account-results.json');
-          const results = new Map();
-          function saveResults() {
-            const ordered = [...results.values()].sort((a, b) => Number(a.accountId) - Number(b.accountId));
-            fs.writeFileSync(resultsPath, JSON.stringify(ordered), {mode: 0o600});
-          }
-
-          const log = fs.createWriteStream(path.join(process.env.RUNNER_TEMP, 'bot-private.log'), {mode: 0o600});
-          const diagnosticPath = path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json');
-          const diagnostic = {stage: 'STARTING', loginState: null, errors: [], exitCode: null, signal: null, dailySet: null};
-          function saveDiagnostic() {
-            fs.writeFileSync(diagnosticPath, JSON.stringify(diagnostic), {mode: 0o600});
-          }
-          saveDiagnostic();
-          // Only fixed labels may leave the runner; never forward arbitrary log text.
-          function diagnose(line) {
-            const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
-            if (clean.startsWith('DAILY_SET_VERIFICATION ')) {
-              try {
-                const v = JSON.parse(clean.slice('DAILY_SET_VERIFICATION '.length));
-                if (['complete', 'incomplete', 'unverified'].includes(v.state) && [v.total, v.completed, v.remaining].every(n => Number.isSafeInteger(n) && n >= 0)) {
-                  diagnostic.dailySet = {state: v.state, total: v.total, completed: v.completed, remaining: v.remaining};
-                  if (process.env.DEBUG_DAILY_SET === 'true') console.log('Daily Set verification: ' + JSON.stringify(diagnostic.dailySet));
-                }
-              } catch {}
-            }
-            if (process.env.DEBUG_DAILY_SET === 'true') {
-              if (clean.startsWith('LOGIN_ALERT_DIAGNOSTIC ')) {
-                try {
-                  const v = JSON.parse(clean.slice('LOGIN_ALERT_DIAGNOSTIC '.length));
-                  const safe = {persistent: v.persistent === true, textAvailable: v.textAvailable === true};
-                  console.log('Login alert diagnostic: ' + JSON.stringify(safe));
-                } catch { console.log('Login alert diagnostic could not be parsed'); }
-              }
-              if (clean.startsWith('SERVER_ACTION_DIAGNOSTIC ')) {
-                try {
-                  const v = JSON.parse(clean.slice('SERVER_ACTION_DIAGNOSTIC '.length));
-                  const safe = {};
-                  for (const k of ['length', 'rows', 'decimalTrueRows', 'hexTrueRows', 'falseRows', 'errorRows', 'status']) {
-                    if (Number.isSafeInteger(v[k]) && v[k] >= 0) safe[k] = v[k];
-                  }
-                  for (const k of ['html', 'redirectMarker', 'hasAvailablePoints', 'acknowledged']) safe[k] = v[k] === true;
-                  for (const [k, allowed] of Object.entries({kind: ['string', 'object', 'array', 'null', 'boolean', 'number', 'undefined'], contentType: ['rsc', 'json', 'html', 'other'], route: ['earn', 'dashboard', 'other']})) {
-                    safe[k] = allowed.includes(v[k]) ? v[k] : 'other';
-                  }
-                  console.log('Server action response shape: ' + JSON.stringify(safe));
-                } catch { console.log('Server action diagnostic could not be parsed'); }
-              }
-              if (clean.startsWith('DAILY_SET_URL_DIAGNOSTIC ')) {
-                try {
-                  const v = JSON.parse(clean.slice('DAILY_SET_URL_DIAGNOSTIC '.length));
-                  const source = ['dom', 'dashboard', 'snapshot'].includes(v.source) ? v.source : 'other';
-                  const host = typeof v.host === 'string' && /(^|\.)bing\.com$/i.test(v.host) ? v.host : 'other';
-                  const matchedBy = typeof v.matchedBy === 'string' && /^[a-z0-9+_-]{1,40}$/i.test(v.matchedBy) ? v.matchedBy : 'other';
-                  console.log('Daily Set URL: ' + JSON.stringify({
-                    source, host, matchedBy,
-                    hasBTDSUOID: v.hasBTDSUOID === true,
-                    hasPUBL: v.hasPUBL === true,
-                    hasCREA: v.hasCREA === true,
-                    hasRnoreward: v.hasRnoreward === true
-                  }));
-                } catch { console.log('Daily Set URL diagnostic could not be parsed'); }
-              }
-              if (clean.startsWith('DAILY_SET_DIAGNOSTIC ')) {
-                try {
-                  const v = JSON.parse(clean.slice('DAILY_SET_DIAGNOSTIC '.length));
-                  const date = value => typeof value === 'string' && /^[0-9TZ:./+-]+$/.test(value) ? value : '?';
-                  console.log('Daily Set dates: ' + JSON.stringify({utc: date(v.utcNow), machine: date(v.machineDate), vietnam: date(v.vietnamDate), partialDashboard: v.partialDashboard === true, selectedDatePresent: v.selectedDatePresent === true,
-                    groups: (Array.isArray(v.groups) ? v.groups : []).slice(0, 14).map(g => ({date: date(g.date), total: Number(g.total), incomplete: Number(g.incomplete), pendingWithPoints: Number(g.pendingWithPoints)}))}));
-                } catch { console.log('Daily Set diagnostic could not be parsed'); }
-              }
-              if (clean.startsWith('MORE_PROMOTIONS_DIAGNOSTIC ')) {
-                try {
-                  const v = JSON.parse(clean.slice('MORE_PROMOTIONS_DIAGNOSTIC '.length));
-                  const allowedPools = ['morePromotions', 'morePromotionsWithoutPromotionalItems', 'promotionalItem', 'promotionalItems', 'reactSnapshot'];
-                  const allowedKinds = ['mid_week_puzzle', 'puzzle', 'trivia', 'quote', 'wallpaper', 'sea_of_thieves', 'search_bar', 'referral', 'artist', 'birds', 'other'];
-                  const allowedTypes = ['urlreward', 'quiz', 'poll', 'search', 'other', 'none'];
-                  const allowedReasons = ['actionable', 'complete', 'no-points', 'locked', 'missing-type', 'negative-priority', 'promotional'];
-                  const counts = {};
-                  for (const pool of allowedPools) {
-                    const n = Number(v.counts?.[pool]);
-                    counts[pool] = Number.isSafeInteger(n) && n >= 0 ? n : 0;
-                  }
-                  const items = (Array.isArray(v.items) ? v.items : []).slice(0, 40).map(item => ({
-                    pool: allowedPools.includes(item.pool) ? item.pool : 'other',
-                    titleKind: allowedKinds.includes(item.titleKind) ? item.titleKind : 'other',
-                    complete: item.complete === true,
-                    pointProgress: Number.isSafeInteger(Number(item.pointProgress)) ? Number(item.pointProgress) : 0,
-                    pointProgressMax: Number.isSafeInteger(Number(item.pointProgressMax)) ? Number(item.pointProgressMax) : 0,
-                    type: allowedTypes.includes(item.type) ? item.type : 'other',
-                    locked: item.locked === true,
-                    promotional: item.promotional === true,
-                    priority: Number.isSafeInteger(Number(item.priority)) ? Number(item.priority) : 0,
-                    actionable: item.actionable === true,
-                    reason: allowedReasons.includes(item.reason) ? item.reason : 'other'
-                  }));
-                  console.log('More Promotions pools: ' + JSON.stringify({
-                    partialDashboard: v.partialDashboard === true,
-                    counts,
-                    items
-                  }));
-                } catch { console.log('More Promotions diagnostic could not be parsed'); }
-              }
-              const tag = clean.match(/\[(DAILY-SET|MORE-PROMOTIONS|ACTIVITY|URL-REWARD|GET-DASHBOARD-DATA|REACT-PARSE)\]/)?.[1];
-              if (tag) {
-                const labels = [
-                  ['All "Daily Set" items have already been completed', 'NO_PENDING_ITEMS'],
-                  ['Started solving', 'STARTED'], ['Finished processing', 'FINISHED_PROCESSING'],
-                  ['All "More Promotions" items have already been completed', 'NO_MORE_PROMOTIONS_PENDING'],
-                  ['Recovered React-only point activity', 'REACT_ONLY_RECOVERED'],
-                  ['Found activity type "UrlReward"', 'URL_REWARD_SELECTED'],
-                  ['Starting UrlReward', 'URL_REWARD_STARTED'], ['Completed UrlReward', 'URL_REWARD_COMPLETED'],
-                  ['Retrying UrlReward once', 'URL_REWARD_RETRY'],
-                  ['credited no points', 'NO_POINTS_CREDITED'], ['not acknowledged', 'NOT_ACKNOWLEDGED'],
-                  ['not reportable', 'NOT_REPORTABLE'], ['not present in page snapshot', 'OFFER_NOT_FOUND'],
-                  ['not discovered in bundle', 'ACTION_NOT_FOUND'], ['unsupported type', 'UNSUPPORTED_TYPE'],
-                  ['disabled in config', 'DISABLED'], ['using Bing flyout fallback', 'FALLBACK_SELECTED'],
-                  ['Using partial Bing flyout dashboard', 'PARTIAL_DASHBOARD'], ['Error in doUrlReward', 'URL_REWARD_ERROR']
-                ].filter(([needle]) => clean.includes(needle)).map(([, label]) => label);
-                const counts = [...clean.matchAll(/\b(remaining|offers|reportable|streaks|pointsGained|currentBalance|expected|status)=(-?\d+)\b/g)].map(m => m[1] + '=' + m[2]);
-                console.log('[Diagnostic][' + tag + '] ' + [...labels, ...counts].join(' '));
-              }
-            }
-            const stage = clean.match(/\[(BROWSER|SESSION|LOGIN|LOGIN-ENTER-EMAIL|LOGIN-ENTER-PASSWORD|DAILY-SET|READ-TO-EARN|SEARCH-MANAGER|SEARCH-BING)\]/)?.[1];
-            if (stage) diagnostic.stage = stage;
-            const state = clean.match(/State transition: [A-Z_]+\s*\u2192\s*(EMAIL_INPUT|FOOTER_ACTION|PASSWORD_INPUT|KMSI_PROMPT|ERROR_ALERT|EMAIL_VERIFICATION_INPUT|RECOVERY_EMAIL_INPUT|SIGN_IN_METHOD_PICKER|2FA_TOTP|LOGIN_PASSWORDLESS|PASSWORDLESS_SEND_CODE|OTP_CODE_ENTRY|PASSKEY_ERROR|PASSKEY_VIDEO|ACCOUNT_LOCKED|LOGGED_IN|UNKNOWN|CHROMEWEBDATA_ERROR)\b/)?.[1];
-            if (state) diagnostic.loginState = state;
-            const patterns = [
-              [/net::ERR_EMPTY_RESPONSE/, 'ERR_EMPTY_RESPONSE'],
-              [/net::ERR_PROXY_CONNECTION_FAILED/, 'ERR_PROXY_CONNECTION_FAILED'],
-              [/net::ERR_SOCKS_CONNECTION_FAILED/, 'ERR_SOCKS_CONNECTION_FAILED'],
-              [/net::ERR_TUNNEL_CONNECTION_FAILED/, 'ERR_TUNNEL_CONNECTION_FAILED'],
-              [/net::ERR_NAME_NOT_RESOLVED/, 'ERR_NAME_NOT_RESOLVED'],
-              [/net::ERR_CONNECTION_RESET/, 'ERR_CONNECTION_RESET'],
-              [/Microsoft login error: Unknown Error/, 'MICROSOFT_LOGIN_UNKNOWN_ERROR'],
-              [/Microsoft login error:/, 'MICROSOFT_LOGIN_ERROR'],
-              [/Login alert disappeared before handling/, 'TRANSIENT_LOGIN_ALERT'],
-              [/Password input detected but no password is configured/, 'PASSWORD_NOT_CONFIGURED'],
-              [/Executable doesn't exist/, 'BROWSER_EXECUTABLE_MISSING'],
-              [/error while loading shared libraries/, 'BROWSER_LIBRARY_MISSING'],
-              [/Missing X server|without having a XServer/, 'DISPLAY_MISSING'],
-              [/Target page, context or browser has been closed/, 'BROWSER_OR_CONTEXT_CLOSED'],
-              [/TimeoutError|Timeout \d+ms exceeded|timed out/i, 'TIMEOUT'],
-              [/Fraud_UserWarning_BotScore_UX/, 'BOT_WARNING'],
-              [/chromewebdata error/i, 'CHROMEWEBDATA_ERROR']
-            ];
-            let recognized = false;
-            for (const [pattern, label] of patterns) {
-              if (!pattern.test(clean)) continue;
-              recognized = true;
-              if (!diagnostic.errors.includes(label)) diagnostic.errors.push(label);
-            }
-            if (/\[ERROR\]/.test(clean) && !recognized && !diagnostic.errors.includes('UNCLASSIFIED_ERROR')) {
-              diagnostic.errors.push('UNCLASSIFIED_ERROR');
-            }
-            saveDiagnostic();
-          }
-          const child = spawn('npm', ['start'], {stdio: ['ignore', 'pipe', 'pipe']});
-          function consume(stream) {
-            readline.createInterface({input: stream}).on('line', line => {
-              log.write(line + '\n');
-              diagnose(line);
-              const marker = 'RECOVERY_ACCOUNT_RESULT ';
-              const at = line.indexOf(marker);
-              if (at < 0) return;
-              try {
-                const r = JSON.parse(line.slice(at + marker.length));
-                const accountId = String(r.accountId || '');
-                if (/^[1-6]$/.test(accountId) && r.finishedAt) {
-                  results.set(accountId, r);
-                  saveResults();
-                }
-              } catch {}
-            });
-          }
-          consume(child.stdout);
-          consume(child.stderr);
-          const heartbeat = setInterval(() => console.log(`Accounts completed: ${results.size}/6; private logs are not published.`), 60000);
-          child.on('error', () => {
-            diagnostic.errors.push('BOT_PROCESS_START_FAILED');
-            saveDiagnostic();
-            clearInterval(heartbeat);
-            console.error('Unable to start bot.');
-            process.exitCode = 1;
-          });
-          child.on('close', (code, signal) => {
-            diagnostic.exitCode = code;
-            diagnostic.signal = signal;
-            saveDiagnostic();
-            clearInterval(heartbeat);
-            log.end();
-            const completed = [...results.values()].filter(r => ['success', 'completed'].includes(String(r.status))).length;
-            const failed = results.size !== 6 || completed !== 6;
-            console.log(`Accounts finished: ${results.size}/6; completed successfully: ${completed}/6.`);
-            process.exitCode = code === 0 && !failed ? 0 : 1;
-          });
-          NODE
-
-      - name: Send Telegram summary
-        if: ${{ always() }}
+      - name: Send totals privately
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          BOT_OUTCOME: ${{ steps.bot.outcome }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
+          ACCOUNT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
+          ACCOUNT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
+          ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
+          ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
+        run: node .github/scripts/rewards-runner.cjs summary
 
-          function readJson(file, fallback) {
-            try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-          }
-
-          function numberOrNull(value) {
-            const n = Number(value);
-            return Number.isFinite(n) ? n : null;
-          }
-
-          function formatDate(value) {
-            if (!value || typeof value !== 'string') return 'không rõ';
-            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
-          }
-
-          (async () => {
-            const token = process.env.TELEGRAM_BOT_TOKEN;
-            const chat = process.env.TELEGRAM_CHAT_ID;
-            if (!token || !chat) throw new Error('Telegram secrets missing');
-
-            const results = readJson(path.join(process.env.RUNNER_TEMP, 'account-results.json'), []);
-            const accounts = readJson(path.join(process.env.RUNNER_TEMP, 'account-emails.json'), []);
-            const byId = new Map(results.map(result => [String(result.accountId), result]));
-
-            let totalPoints = 0;
-            let knownPointAccounts = 0;
-            let completed = 0;
-            const accountLines = [];
-
-            for (let index = 1; index <= 6; index++) {
-              const id = String(index);
-              const result = byId.get(id);
-              const email = accounts.find(account => String(account.index) === id)?.email || `Tài khoản ${id}`;
-
-              if (!result) {
-                accountLines.push(`• TK${id} — ${email}: chưa có kết quả ⚠️`);
-                continue;
-              }
-
-              const gained = numberOrNull(result.pointsEarned);
-              const initial = numberOrNull(result.initialBalance);
-              const final = numberOrNull(result.finalBalance);
-              const ok = ['success', 'completed'].includes(String(result.status || '').toLowerCase());
-              if (ok) completed++;
-              if (gained !== null) {
-                totalPoints += gained;
-                knownPointAccounts++;
-              }
-
-              const parts = [
-                `• TK${id} — ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
-                initial !== null && final !== null ? `${initial} → ${final}` : null,
-                ok ? '✅' : `⚠️ ${result.errorCode || result.status || 'lỗi'}`
-              ].filter(Boolean);
-              accountLines.push(parts.join(' | '));
-            }
-
-            const firstDate = results.find(result => typeof result.date === 'string')?.date;
-            const totalText = knownPointAccounts ? `${totalPoints >= 0 ? '+' : ''}${totalPoints}` : '?';
-            const lines = [
-              '🏆 Microsoft Rewards — Tổng kết',
-              `📅 ${formatDate(firstDate)}`,
-              '',
-              `Tổng điểm kiếm được: ${totalText} điểm`,
-              `Tài khoản hoàn tất: ${completed}/6`,
-              '',
-              ...accountLines,
-              '',
-              `Trạng thái: ${completed === 6 ? '✅ Hoàn tất 6/6' : '⚠️ Chưa hoàn tất 6/6'}`,
-              process.env.RUN_URL
-            ];
-
-            const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({chat_id: chat, text: lines.join('\n')}),
-              signal: AbortSignal.timeout(20000)
-            });
-
-            const body = await response.json();
-            if (!response.ok || !body.ok) throw new Error('Telegram rejected notification');
-            console.log('Telegram summary sent.');
-          })().catch(() => {
-            console.error('Telegram notification failed; check secrets and bot access.');
-            process.exitCode = 1;
-          });
-          NODE
-
-      - name: Cleanup
-        if: ${{ always() }}
-        run: |
-          if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
-            ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p 2210 labotecc@hv42-25048.azdigihost.com || true
-          fi
-          rm -f ~/.ssh/azdigi_key .env config.json "$RUNNER_TEMP/bot-private.log" "$RUNNER_TEMP/account-results.json" "$RUNNER_TEMP/account-emails.json" "$RUNNER_TEMP/account-diagnostic.json"

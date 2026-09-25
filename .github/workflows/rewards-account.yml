@@ -1,0 +1,132 @@
+name: Rewards account worker
+
+on:
+  workflow_call:
+    inputs:
+      account:
+        type: number
+        required: true
+      debug_daily_set:
+        type: boolean
+        default: false
+    outputs:
+      result:
+        description: Numeric result and fixed status labels; no account identity
+        value: ${{ jobs.account.outputs.result }}
+
+permissions:
+  contents: read
+
+jobs:
+  account:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    outputs:
+      result: ${{ steps.report.outputs.result }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      ACCOUNT_SLOT: ${{ inputs.account }}
+      BOT_DIR: ${{ github.workspace }}/bot
+      REPORT_PATH: ${{ runner.temp }}/rewards-result.json
+      DEBUG_DAILY_SET: ${{ inputs.debug_daily_set && 'true' || 'false' }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout automation
+        uses: actions/checkout@v4
+        with:
+          path: automation
+          persist-credentials: false
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Checkout private v4 source
+        uses: actions/checkout@v4
+        with:
+          repository: XuanQuyet1094/Microsoft-Rewards-Script
+          ref: v4
+          path: bot
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - name: Install browser and build
+        timeout-minutes: 15
+        working-directory: bot
+        run: |
+          npm ci --include=dev
+          npx --no-install patchright install --with-deps chromium
+          npm run build
+          test -f dist/index.js
+
+      - name: Configure single-account run
+        run: node automation/.github/scripts/rewards-runner.cjs configure
+
+      - name: Start verified AZDIGI SOCKS5 tunnel
+        timeout-minutes: 3
+        env:
+          AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
+          AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
+        run: |
+          : "${AZDIGI_SSH_KEY:?Missing AZDIGI_SSH_KEY}"
+          : "${AZDIGI_KNOWN_HOSTS:?Missing AZDIGI_KNOWN_HOSTS}"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AZDIGI_SSH_KEY" | tr -d '\r' > ~/.ssh/azdigi_key
+          printf '%s\n' "$AZDIGI_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/azdigi_key ~/.ssh/known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/azdigi_key >/dev/null
+          ssh -M -S "$RUNNER_TEMP/azdigi.sock" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -f -N -D 127.0.0.1:1080 -p 2210 \
+            -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
+          for url in https://rewards.bing.com/ https://www.bing.com/; do
+            curl --fail --silent --show-error --location \
+              --connect-timeout 15 --max-time 45 \
+              --proxy socks5h://127.0.0.1:1080 "$url" -o /dev/null
+          done
+
+      - name: Run selected account (maximum 75 minutes)
+        id: bot
+        continue-on-error: true
+        env:
+          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
+          ACCOUNT_PASSWORD: ${{ secrets[format('ACCOUNT_{0}_PASSWORD', inputs.account)] }}
+          ACCOUNT_TOTP_SECRET: ${{ secrets[format('ACCOUNT_{0}_TOTP_SECRET', inputs.account)] }}
+          ACCOUNT_RECOVERY_EMAIL: ${{ secrets[format('ACCOUNT_{0}_RECOVERY_EMAIL', inputs.account)] }}
+        run: node automation/.github/scripts/rewards-runner.cjs run
+
+      - name: Send one account report to Telegram
+        id: report
+        if: ${{ always() }}
+        env:
+          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_OUTCOME: ${{ steps.bot.outcome }}
+          JOB_STATUS: ${{ job.status }}
+        run: node automation/.github/scripts/rewards-runner.cjs report
+
+      - name: Cleanup tunnel and sensitive files
+        if: ${{ always() }}
+        run: |
+          if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
+            ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p 2210 labotecc@hv42-25048.azdigihost.com || true
+          fi
+          rm -f ~/.ssh/azdigi_key ~/.ssh/known_hosts "$REPORT_PATH"
+          rm -f "$BOT_DIR/.env" "$BOT_DIR/config.json"
+          rm -rf "$BOT_DIR/sessions" "$BOT_DIR/diagnostics" "$RUNNER_TEMP/rewards-private"
+
+      - name: Random rest before next account
+        if: ${{ !cancelled() && inputs.account < 6 }}
+        run: node automation/.github/scripts/rewards-runner.cjs rest
+
+      - name: Preserve bot failure status
+        if: ${{ !cancelled() && steps.bot.outcome == 'failure' }}
+        run: exit 1
+

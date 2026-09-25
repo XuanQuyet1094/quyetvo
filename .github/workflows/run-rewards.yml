@@ -3,18 +3,6 @@ name: run-rewards
 on:
   workflow_dispatch:
     inputs:
-      account_index:
-        description: 'Select account to run'
-        type: choice
-        required: true
-        default: '1'
-        options:
-          - '1'
-          - '2'
-          - '3'
-          - '4'
-          - '5'
-          - '6'
       debug_daily_set:
         description: 'Show sanitized Daily Set diagnostics'
         type: boolean
@@ -26,13 +14,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: rewards-selected-account
+  group: rewards-accounts-1-6
   cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 180
     defaults:
       run:
         shell: bash
@@ -94,6 +82,7 @@ jobs:
           const cfg = JSON.parse(fs.readFileSync('config.example.json', 'utf8'));
           cfg.headless = true;
           cfg.clusters = 1;
+          cfg.accountDelay = {min: '2min', max: '2min'};
           cfg.errorDiagnostics = false;
           cfg.debugLogs = false;
           for (const name of ['telegram', 'discord', 'ntfy']) {
@@ -129,34 +118,58 @@ jobs:
               --proxy socks5h://127.0.0.1:1080 "$url" -o /dev/null
           done
 
-      - name: Run selected account
+      - name: Run accounts 1 to 6
         id: bot
         env:
           DEBUG_DAILY_SET: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set && 'true' || 'false' }}
-          SELECTED_ACCOUNT_INDEX: ${{ github.event_name == 'workflow_dispatch' && inputs.account_index || '1' }}
-          SLOT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
-          SLOT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
-          SLOT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
-          SLOT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
-          SLOT_2_PASSWORD: ${{ secrets.ACCOUNT_2_PASSWORD }}
-          SLOT_2_TOTP_SECRET: ${{ secrets.ACCOUNT_2_TOTP_SECRET }}
-          SLOT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
-          SLOT_3_PASSWORD: ${{ secrets.ACCOUNT_3_PASSWORD }}
-          SLOT_3_TOTP_SECRET: ${{ secrets.ACCOUNT_3_TOTP_SECRET }}
-          SLOT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
-          SLOT_4_PASSWORD: ${{ secrets.ACCOUNT_4_PASSWORD }}
-          SLOT_4_TOTP_SECRET: ${{ secrets.ACCOUNT_4_TOTP_SECRET }}
-          SLOT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
-          SLOT_5_PASSWORD: ${{ secrets.ACCOUNT_5_PASSWORD }}
-          SLOT_5_TOTP_SECRET: ${{ secrets.ACCOUNT_5_TOTP_SECRET }}
-          SLOT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
-          SLOT_6_PASSWORD: ${{ secrets.ACCOUNT_6_PASSWORD }}
-          SLOT_6_TOTP_SECRET: ${{ secrets.ACCOUNT_6_TOTP_SECRET }}
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
+          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+          ACCOUNT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
+          ACCOUNT_2_PASSWORD: ${{ secrets.ACCOUNT_2_PASSWORD }}
+          ACCOUNT_2_TOTP_SECRET: ${{ secrets.ACCOUNT_2_TOTP_SECRET }}
+          ACCOUNT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
+          ACCOUNT_3_PASSWORD: ${{ secrets.ACCOUNT_3_PASSWORD }}
+          ACCOUNT_3_TOTP_SECRET: ${{ secrets.ACCOUNT_3_TOTP_SECRET }}
+          ACCOUNT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
+          ACCOUNT_4_PASSWORD: ${{ secrets.ACCOUNT_4_PASSWORD }}
+          ACCOUNT_4_TOTP_SECRET: ${{ secrets.ACCOUNT_4_TOTP_SECRET }}
+          ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
+          ACCOUNT_5_PASSWORD: ${{ secrets.ACCOUNT_5_PASSWORD }}
+          ACCOUNT_5_TOTP_SECRET: ${{ secrets.ACCOUNT_5_TOTP_SECRET }}
+          ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
+          ACCOUNT_6_PASSWORD: ${{ secrets.ACCOUNT_6_PASSWORD }}
+          ACCOUNT_6_TOTP_SECRET: ${{ secrets.ACCOUNT_6_TOTP_SECRET }}
           ACCOUNT_1_GEO_LOCALE: VN
           ACCOUNT_1_LANG_CODE: vi
           ACCOUNT_1_PROXY_HTTP: 'true'
           ACCOUNT_1_PROXY_URL: socks5://127.0.0.1
           ACCOUNT_1_PROXY_PORT: '1080'
+          ACCOUNT_2_GEO_LOCALE: VN
+          ACCOUNT_2_LANG_CODE: vi
+          ACCOUNT_2_PROXY_HTTP: 'true'
+          ACCOUNT_2_PROXY_URL: socks5://127.0.0.1
+          ACCOUNT_2_PROXY_PORT: '1080'
+          ACCOUNT_3_GEO_LOCALE: VN
+          ACCOUNT_3_LANG_CODE: vi
+          ACCOUNT_3_PROXY_HTTP: 'true'
+          ACCOUNT_3_PROXY_URL: socks5://127.0.0.1
+          ACCOUNT_3_PROXY_PORT: '1080'
+          ACCOUNT_4_GEO_LOCALE: VN
+          ACCOUNT_4_LANG_CODE: vi
+          ACCOUNT_4_PROXY_HTTP: 'true'
+          ACCOUNT_4_PROXY_URL: socks5://127.0.0.1
+          ACCOUNT_4_PROXY_PORT: '1080'
+          ACCOUNT_5_GEO_LOCALE: VN
+          ACCOUNT_5_LANG_CODE: vi
+          ACCOUNT_5_PROXY_HTTP: 'true'
+          ACCOUNT_5_PROXY_URL: socks5://127.0.0.1
+          ACCOUNT_5_PROXY_PORT: '1080'
+          ACCOUNT_6_GEO_LOCALE: VN
+          ACCOUNT_6_LANG_CODE: vi
+          ACCOUNT_6_PROXY_HTTP: 'true'
+          ACCOUNT_6_PROXY_URL: socks5://127.0.0.1
+          ACCOUNT_6_PROXY_PORT: '1080'
         run: |
           node <<'NODE'
           const fs = require('node:fs');
@@ -164,43 +177,27 @@ jobs:
           const readline = require('node:readline');
           const {spawn} = require('node:child_process');
 
-          const selectedIndex = String(process.env.SELECTED_ACCOUNT_INDEX || '1');
-          const slots = Object.fromEntries(
-            [1, 2, 3, 4, 5, 6].map(index => [
-              String(index),
-              {
-                email: process.env[`SLOT_${index}_EMAIL`] || '',
-                password: process.env[`SLOT_${index}_PASSWORD`] || '',
-                totp: process.env[`SLOT_${index}_TOTP_SECRET`] || ''
-              }
-            ])
-          );
-          const selected = slots[selectedIndex];
-          if (!selected || !selected.email.trim()) {
-            console.error(`Selected account ${selectedIndex} is not configured. Add ACCOUNT_${selectedIndex}_EMAIL in repository secrets.`);
+          const configuredAccounts = [1, 2, 3, 4, 5, 6].map(index => ({
+            index: String(index),
+            email: String(process.env[`ACCOUNT_${index}_EMAIL`] || '').trim()
+          }));
+          const missing = configuredAccounts.filter(account => !account.email);
+          if (missing.length) {
+            console.error('Missing repository secrets for account slots: ' + missing.map(account => account.index).join(', '));
             process.exit(1);
           }
 
-          const selectedPath = path.join(process.env.RUNNER_TEMP, 'selected-account.json');
-          fs.writeFileSync(
-            selectedPath,
-            JSON.stringify({index: selectedIndex, email: selected.email.trim()}),
-            {mode: 0o600}
-          );
+          const accountMetaPath = path.join(process.env.RUNNER_TEMP, 'account-emails.json');
+          fs.writeFileSync(accountMetaPath, JSON.stringify(configuredAccounts), {mode: 0o600});
 
-          const childEnv = {
-            ...process.env,
-            ACCOUNT_1_EMAIL: selected.email,
-            ACCOUNT_1_PASSWORD: selected.password,
-            ACCOUNT_1_TOTP_SECRET: selected.totp
-          };
-          for (const key of Object.keys(childEnv)) {
-            if (/^SLOT_[1-6]_/.test(key)) delete childEnv[key];
+          const resultsPath = path.join(process.env.RUNNER_TEMP, 'account-results.json');
+          const results = new Map();
+          function saveResults() {
+            const ordered = [...results.values()].sort((a, b) => Number(a.accountId) - Number(b.accountId));
+            fs.writeFileSync(resultsPath, JSON.stringify(ordered), {mode: 0o600});
           }
 
-          const resultPath = path.join(process.env.RUNNER_TEMP, 'account-result.json');
           const log = fs.createWriteStream(path.join(process.env.RUNNER_TEMP, 'bot-private.log'), {mode: 0o600});
-          let last = null;
           const diagnosticPath = path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json');
           const diagnostic = {stage: 'STARTING', loginState: null, errors: [], exitCode: null, signal: null, dailySet: null};
           function saveDiagnostic() {
@@ -350,7 +347,7 @@ jobs:
             }
             saveDiagnostic();
           }
-          const child = spawn('npm', ['start'], {stdio: ['ignore', 'pipe', 'pipe'], env: childEnv});
+          const child = spawn('npm', ['start'], {stdio: ['ignore', 'pipe', 'pipe']});
           function consume(stream) {
             readline.createInterface({input: stream}).on('line', line => {
               log.write(line + '\n');
@@ -360,16 +357,17 @@ jobs:
               if (at < 0) return;
               try {
                 const r = JSON.parse(line.slice(at + marker.length));
-                if (String(r.accountId) === '1' && r.finishedAt) {
-                  last = r;
-                  fs.writeFileSync(resultPath, JSON.stringify(r), {mode: 0o600});
+                const accountId = String(r.accountId || '');
+                if (/^[1-6]$/.test(accountId) && r.finishedAt) {
+                  results.set(accountId, r);
+                  saveResults();
                 }
               } catch {}
             });
           }
           consume(child.stdout);
           consume(child.stderr);
-          const heartbeat = setInterval(() => console.log(`Selected account ${selectedIndex}: still running; private logs are not published.`), 60000);
+          const heartbeat = setInterval(() => console.log(`Accounts completed: ${results.size}/6; private logs are not published.`), 60000);
           child.on('error', () => {
             diagnostic.errors.push('BOT_PROCESS_START_FAILED');
             saveDiagnostic();
@@ -383,8 +381,9 @@ jobs:
             saveDiagnostic();
             clearInterval(heartbeat);
             log.end();
-            const failed = !last || !['success', 'completed'].includes(last.status);
-            console.log(`Selected account ${selectedIndex} finished; detailed result will be sent privately.`);
+            const completed = [...results.values()].filter(r => ['success', 'completed'].includes(String(r.status))).length;
+            const failed = results.size !== 6 || completed !== 6;
+            console.log(`Accounts finished: ${results.size}/6; completed successfully: ${completed}/6.`);
             process.exitCode = code === 0 && !failed ? 0 : 1;
           });
           NODE
@@ -401,8 +400,8 @@ jobs:
           const fs = require('node:fs');
           const path = require('node:path');
 
-          function readJson(file) {
-            try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+          function readJson(file, fallback) {
+            try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
           }
 
           function numberOrNull(value) {
@@ -421,40 +420,55 @@ jobs:
             const chat = process.env.TELEGRAM_CHAT_ID;
             if (!token || !chat) throw new Error('Telegram secrets missing');
 
-            const result = readJson(path.join(process.env.RUNNER_TEMP, 'account-result.json'));
-            const diagnostic = readJson(path.join(process.env.RUNNER_TEMP, 'account-diagnostic.json'));
-            const selectedAccount = readJson(path.join(process.env.RUNNER_TEMP, 'selected-account.json'));
-            const accountIndex = String(selectedAccount.index || '?');
-            const email = String(selectedAccount.email || `Tài khoản ${accountIndex}`);
+            const results = readJson(path.join(process.env.RUNNER_TEMP, 'account-results.json'), []);
+            const accounts = readJson(path.join(process.env.RUNNER_TEMP, 'account-emails.json'), []);
+            const byId = new Map(results.map(result => [String(result.accountId), result]));
 
-            const gained = numberOrNull(result.pointsEarned);
-            const initial = numberOrNull(result.initialBalance);
-            const final = numberOrNull(result.finalBalance);
-            const success = ['success', 'completed'].includes(String(result.status || '').toLowerCase()) &&
-              Number(diagnostic.exitCode ?? 0) === 0;
-            const errorCount = Array.isArray(diagnostic.errors) ? diagnostic.errors.length : 0;
-            const daily = diagnostic.dailySet;
-            const dailyText = daily && Number.isSafeInteger(daily.completed) && Number.isSafeInteger(daily.total)
-              ? `${daily.completed}/${daily.total}${daily.state === 'complete' ? ' ✅' : ''}`
-              : 'chưa xác minh';
+            let totalPoints = 0;
+            let knownPointAccounts = 0;
+            let completed = 0;
+            const accountLines = [];
 
-            const accountLine = [
-              `• Tài khoản ${accountIndex} — ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
-              initial !== null && final !== null ? `${initial} → ${final}` : null,
-              `Daily Set ${dailyText}`
-            ].filter(Boolean).join(' | ');
+            for (let index = 1; index <= 6; index++) {
+              const id = String(index);
+              const result = byId.get(id);
+              const email = accounts.find(account => String(account.index) === id)?.email || `Tài khoản ${id}`;
 
+              if (!result) {
+                accountLines.push(`• TK${id} — ${email}: chưa có kết quả ⚠️`);
+                continue;
+              }
+
+              const gained = numberOrNull(result.pointsEarned);
+              const initial = numberOrNull(result.initialBalance);
+              const final = numberOrNull(result.finalBalance);
+              const ok = ['success', 'completed'].includes(String(result.status || '').toLowerCase());
+              if (ok) completed++;
+              if (gained !== null) {
+                totalPoints += gained;
+                knownPointAccounts++;
+              }
+
+              const parts = [
+                `• TK${id} — ${email}: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
+                initial !== null && final !== null ? `${initial} → ${final}` : null,
+                ok ? '✅' : `⚠️ ${result.errorCode || result.status || 'lỗi'}`
+              ].filter(Boolean);
+              accountLines.push(parts.join(' | '));
+            }
+
+            const firstDate = results.find(result => typeof result.date === 'string')?.date;
+            const totalText = knownPointAccounts ? `${totalPoints >= 0 ? '+' : ''}${totalPoints}` : '?';
             const lines = [
               '🏆 Microsoft Rewards — Tổng kết',
-              `📅 ${formatDate(result.date)}`,
+              `📅 ${formatDate(firstDate)}`,
               '',
-              `Tổng điểm kiếm được: ${gained === null ? '?' : (gained >= 0 ? '+' : '') + gained} điểm`,
-              'Tài khoản đã xử lý: 1/1',
+              `Tổng điểm kiếm được: ${totalText} điểm`,
+              `Tài khoản hoàn tất: ${completed}/6`,
               '',
-              accountLine,
+              ...accountLines,
               '',
-              `Trạng thái: ${success ? '✅ Hoàn tất' : '⚠️ Chưa hoàn tất'}`,
-              `Lỗi: ${errorCount === 0 && !result.errorCode ? 'Không' : result.errorCode || diagnostic.errors?.join(', ') || 'Có lỗi'}`,
+              `Trạng thái: ${completed === 6 ? '✅ Hoàn tất 6/6' : '⚠️ Chưa hoàn tất 6/6'}`,
               process.env.RUN_URL
             ];
 
@@ -480,4 +494,4 @@ jobs:
           if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
             ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p 2210 labotecc@hv42-25048.azdigihost.com || true
           fi
-          rm -f ~/.ssh/azdigi_key .env config.json "$RUNNER_TEMP/bot-private.log" "$RUNNER_TEMP/account-result.json" "$RUNNER_TEMP/account-diagnostic.json" "$RUNNER_TEMP/selected-account.json"
+          rm -f ~/.ssh/azdigi_key .env config.json "$RUNNER_TEMP/bot-private.log" "$RUNNER_TEMP/account-results.json" "$RUNNER_TEMP/account-emails.json" "$RUNNER_TEMP/account-diagnostic.json"

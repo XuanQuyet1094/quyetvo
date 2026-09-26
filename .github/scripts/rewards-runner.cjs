@@ -165,24 +165,24 @@ function accountMessage(r, email, url) {
   const dailyText = daily && daily.state !== 'unverified'
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
   const lines = [
-    '<b>MICROSOFT REWARDS</b>',
+    '🏆 <b>MICROSOFT REWARDS</b>',
     `<b>${process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
-    `<code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
-    `${html(r.date)} · Giờ Việt Nam`, '',
-    `<b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
-    `<b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
-    `<b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
-    `<b>Daily Set:</b> ${dailyText}`,
-    `<b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`,
-    `<b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
+    `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
+    `📅 ${html(r.date)} · Giờ Việt Nam`, '',
+    `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
+    `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
+    `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
+    `🔥 <b>Daily Set:</b> ${dailyText}`,
+    `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`,
+    `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
   ];
-  if (r.errorCode) lines.push(`<b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
+  if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.status !== 'completed' && r.diagnostic) {
-    lines.push(`<b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
-    if (r.diagnostic.errors.length) lines.push(`<b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
+    lines.push(`📍 <b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
+    if (r.diagnostic.errors.length) lines.push(`🛠️ <b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
   }
-  lines.push('', r.accountId < 6 ? 'Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : 'Đã đến tài khoản cuối cùng trong danh sách.');
-  lines.push(`<a href="${html(url)}">Xem lượt chạy GitHub</a>`);
+  lines.push('', r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
+  lines.push(`<a href="${html(url)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }
 async function telegram(text, env = process.env, fetchFn = fetch) {
@@ -220,17 +220,17 @@ function summaryMessage(jobs, env = process.env) {
   };
   const points = sum('pointsEarned'), initial = sum('initialBalance'), final = sum('finalBalance');
   const completed = rows.filter(({r}) => r?.status === 'completed').length;
-  const lines = ['<b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'retry' ? '<b>Tổng kết lượt dự phòng</b>' : '<b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
-    `<b>Điểm ghi nhận:</b> ${points.n ? gain(points.total) : 'Chưa xác minh'} (${points.n}/6 tài khoản có số liệu)`,
-    `<b>Kết thúc thành công:</b> ${completed}/6`,
-    `<b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
+  const lines = ['🏆 <b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'retry' ? '🔁 <b>Tổng kết lượt dự phòng</b>' : '📊 <b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
+    `💎 <b>Điểm ghi nhận:</b> ${points.n ? gain(points.total) : 'Chưa xác minh'} (${points.n}/6 tài khoản có số liệu)`,
+    `✅ <b>Kết thúc thành công:</b> ${completed}/6`,
+    `💰 <b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
     lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
   }
   if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
   lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',
-    `<a href="${html(env.RUN_URL)}">Xem lượt chạy GitHub</a>`);
+    `<a href="${html(env.RUN_URL)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }
 async function main() {

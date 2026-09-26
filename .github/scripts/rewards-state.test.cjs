@@ -32,6 +32,28 @@ test('stored result excludes balances, email, TOTP and raw diagnostics', () => {
   const s=stateResult({status:'failed',errorCode:'NETWORK_TIMEOUT',email:'private',totp:'private',pointsEarned:99,diagnostic:{raw:'private'}});
   assert.deepEqual(s,{status:'failed',retryable:true,errorCode:'NETWORK_TIMEOUT'});
 });
+test('private diagnostics retain recognized labels but drop every raw field', () => {
+  const s=stateResult({status:'failed',errorCode:'FLOW_FAILED',diagnostic:{
+    stage:'LOGIN',loginState:'ERROR_ALERT',email:'do-not-store@example.test',
+    raw:'secret text',url:'https://example.test/?token=secret',
+    errors:['MICROSOFT_LOGIN_UNKNOWN_ERROR','secret text','MICROSOFT_LOGIN_UNKNOWN_ERROR']
+  }});
+  assert.deepEqual(s.diagnostic,{stage:'LOGIN',loginState:'ERROR_ALERT',errors:['MICROSOFT_LOGIN_UNKNOWN_ERROR']});
+  assert.equal(s.retryable,false);
+  assert.ok(!JSON.stringify(s).includes('secret'));
+});
+test('unknown diagnostic values are omitted without widening retry eligibility', () => {
+  const s=stateResult({status:'failed',errorCode:'FLOW_FAILED',diagnostic:{
+    stage:'private account',loginState:'private token',errors:['unknown error']
+  }});
+  assert.equal(s.diagnostic,undefined);
+  assert.equal(s.retryable,false);
+  const technical=stateResult({status:'failed',errorCode:'FLOW_FAILED',diagnostic:{
+    stage:'SEARCH-BING',errors:['ERR_PROXY_CONNECTION_FAILED']
+  }});
+  assert.equal(technical.retryable,true);
+  assert.deepEqual(technical.diagnostic.errors,['ERR_PROXY_CONNECTION_FAILED']);
+});
 test('claim is persisted before authorization and cannot be claimed twice', async () => {
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'state-test-'));
   const prev={...process.env}, oldFetch=global.fetch;

@@ -6,7 +6,7 @@ Schedule (Vietnam time): 07:00 morning, 15:00 technical-failure recovery. GitHub
 
 Create a fine-grained GitHub PAT for **only** `XuanQuyet1094/Microsoft-Rewards-Script` with **Contents: Read and write**. Add its value to the public `quyetvo` repository's Actions secret named `REWARDS_STATE_TOKEN`. Keep `PRIVATE_REPO_TOKEN` read-only for checkout. No Actions-write or Workflows permission is needed for the state token. PAT repository permissions are not restricted to the state branch, so keep the token private and review changes to workflow code.
 
-Storage branch: `rewards-state` in the private repo. Paths: `state/YYYY-MM-DD/account-N.json`. Only slot number, fixed status/error labels, eligibility and attempt identifiers/timestamps are saved; no email, balances, credentials, cookies or logs.
+Storage branch: `rewards-state` in the private repo. Paths: `state/YYYY-MM-DD/account-N.json`. Only slot number, fixed status/error labels, eligibility and attempt identifiers/timestamps are saved; no email, balances, credentials, cookies or logs. Results also retain an allowlisted last stage, login state and error labels under `diagnostic`, so a generic `FLOW_FAILED` can be investigated privately. Unknown diagnostic strings and raw messages are discarded. Older state files cannot recover details that were not saved.
 
 ## Recovery rules
 

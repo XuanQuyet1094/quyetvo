@@ -6,6 +6,25 @@ const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10
 const transient = new Set(['NETWORK_TIMEOUT', 'ACCOUNT_TIMEOUT', 'HTTP_408', 'HTTP_425', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504']);
 const network = new Set(['ERR_EMPTY_RESPONSE', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_SOCKS_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED', 'ERR_NAME_NOT_RESOLVED', 'ERR_CONNECTION_RESET']);
 const blocked = new Set(['AUTH_REQUIRED', 'ACCOUNT_LOCKED', 'BOT_WARNING', 'PASSWORD_NOT_CONFIGURED', 'MICROSOFT_LOGIN_ERROR', 'MICROSOFT_LOGIN_UNKNOWN_ERROR']);
+const diagnosticErrors = new Set([...network, ...blocked, 'TRANSIENT_LOGIN_ALERT',
+  'BROWSER_EXECUTABLE_MISSING', 'BROWSER_LIBRARY_MISSING', 'DISPLAY_MISSING',
+  'BROWSER_OR_CONTEXT_CLOSED', 'TIMEOUT', 'CHROMEWEBDATA_ERROR', 'UNCLASSIFIED_ERROR']);
+const diagnosticStages = new Set(['STARTING', 'BROWSER', 'SESSION', 'LOGIN',
+  'LOGIN-ENTER-EMAIL', 'LOGIN-ENTER-PASSWORD', 'DAILY-SET', 'READ-TO-EARN',
+  'SEARCH-MANAGER', 'SEARCH-BING']);
+const diagnosticLoginStates = new Set(['EMAIL_INPUT', 'FOOTER_ACTION', 'PASSWORD_INPUT',
+  'KMSI_PROMPT', 'ERROR_ALERT', 'EMAIL_VERIFICATION_INPUT', 'RECOVERY_EMAIL_INPUT',
+  'SIGN_IN_METHOD_PICKER', '2FA_TOTP', 'LOGIN_PASSWORDLESS', 'PASSWORDLESS_SEND_CODE',
+  'OTP_CODE_ENTRY', 'PASSKEY_ERROR', 'PASSKEY_VIDEO', 'ACCOUNT_LOCKED', 'LOGGED_IN',
+  'UNKNOWN', 'CHROMEWEBDATA_ERROR']);
+function safeDiagnostic(value) {
+  // Persist only fixed labels. Never include raw text, URLs, account identity or tokens.
+  const stage = diagnosticStages.has(value?.stage) ? value.stage : null;
+  const loginState = diagnosticLoginStates.has(value?.loginState) ? value.loginState : null;
+  const errors = [...new Set((Array.isArray(value?.errors) ? value.errors : [])
+    .filter(label => diagnosticErrors.has(label)))];
+  return stage || loginState || errors.length ? {stage, loginState, errors} : null;
+}
 function retryable(r) {
   if (!r || r.status !== 'failed') return false;
   const labels = [r.errorCode, ...(r.diagnostic?.errors || [])];
@@ -17,8 +36,11 @@ function eligible(state, date, slot) {
     state.morning?.status === 'failed' && state.morning.retryable === true && !state.retry);
 }
 function stateResult(r) {
-  return {status: ['completed', 'failed', 'needs_action'].includes(r.status) ? r.status : 'failed',
+  const result = {status: ['completed', 'failed', 'needs_action'].includes(r.status) ? r.status : 'failed',
     retryable: retryable(r), errorCode: typeof r.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(r.errorCode) ? r.errorCode : null};
+  const diagnostic = safeDiagnostic(r.diagnostic);
+  if (diagnostic) result.diagnostic = diagnostic;
+  return result;
 }
 async function api(route, options = {}, allow404 = false) {
   const response = await fetch(`https://api.github.com/repos/${REPO}${route}`, {

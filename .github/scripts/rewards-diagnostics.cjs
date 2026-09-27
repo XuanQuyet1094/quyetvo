@@ -108,11 +108,19 @@ function diagnose(line) {
       console.log('[Diagnostic][' + tag + '] ' + [...labels, ...counts].join(' '));
     }
   }
-  const stage = clean.match(/\[(BROWSER|SESSION|LOGIN|LOGIN-ENTER-EMAIL|LOGIN-ENTER-PASSWORD|DAILY-SET|READ-TO-EARN|SEARCH-MANAGER|SEARCH-BING)\]/)?.[1];
+  const stage = clean.match(/\[(BROWSER|SESSION|LOGIN|LOGIN-TOTP|LOGIN-ENTER-EMAIL|LOGIN-ENTER-PASSWORD|DAILY-SET|READ-TO-EARN|SEARCH-MANAGER|SEARCH-BING)\]/)?.[1];
   if (stage) diagnostic.stage = stage;
   const state = clean.match(/State transition: [A-Z_]+\s*\u2192\s*(EMAIL_INPUT|FOOTER_ACTION|PASSWORD_INPUT|KMSI_PROMPT|ERROR_ALERT|EMAIL_VERIFICATION_INPUT|RECOVERY_EMAIL_INPUT|SIGN_IN_METHOD_PICKER|2FA_TOTP|LOGIN_PASSWORDLESS|PASSWORDLESS_SEND_CODE|OTP_CODE_ENTRY|PASSKEY_ERROR|PASSKEY_VIDEO|ACCOUNT_LOCKED|LOGGED_IN|UNKNOWN|CHROMEWEBDATA_ERROR)\b/)?.[1];
   if (state) diagnostic.loginState = state;
   const patterns = [
+    [/TOTP method selection \| configured=true \| offered=false/, 'TOTP_NOT_OFFERED'],
+    [/TOTP method selection failed/, 'TOTP_METHOD_SELECTION_FAILED'],
+    [/TOTP secret must be|TOTP secret could not be/, 'TOTP_SECRET_INVALID'],
+    [/TOTP secret is required/, 'TOTP_SECRET_MISSING'],
+    [/TOTP verification was rejected/, 'TOTP_REJECTED'],
+    [/TOTP input field not found|Unable to fill TOTP input/, 'TOTP_INPUT_MISSING'],
+    [/TOTP submit button not found|Unable to submit TOTP code/, 'TOTP_SUBMIT_FAILED'],
+    [/TOTP challenge did not advance/, 'TOTP_NOT_ADVANCED'],
     [/net::ERR_EMPTY_RESPONSE/, 'ERR_EMPTY_RESPONSE'],
     [/net::ERR_PROXY_CONNECTION_FAILED/, 'ERR_PROXY_CONNECTION_FAILED'],
     [/net::ERR_SOCKS_CONNECTION_FAILED/, 'ERR_SOCKS_CONNECTION_FAILED'],
@@ -145,4 +153,3 @@ function diagnose(line) {
 
 return diagnose;
 };
-

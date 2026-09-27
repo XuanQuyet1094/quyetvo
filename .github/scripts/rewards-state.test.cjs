@@ -5,6 +5,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {retryable, eligible, stateResult, claim} = require('./rewards-state.cjs');
+const createDiagnostics = require('./rewards-diagnostics.cjs');
+test('TOTP failures remain diagnosable privately and never retry after an earlier network error', () => {
+  const diagnostic={stage:null,loginState:null,errors:[]};
+  const diagnose=createDiagnostics(diagnostic);
+  diagnose('[WARN] MOBILE [LOGIN] net::ERR_EMPTY_RESPONSE');
+  diagnose('[ERROR] MOBILE [LOGIN-TOTP] TOTP verification was rejected');
+  const result=stateResult({status:'failed',errorCode:'FLOW_FAILED',diagnostic});
+  assert.equal(result.retryable,false);
+  assert.equal(result.diagnostic.stage,'LOGIN-TOTP');
+  assert.ok(result.diagnostic.errors.includes('TOTP_REJECTED'));
+});
 test('retry only technical failures, never success or unverified completion', () => {
   assert.equal(retryable({status:'failed',errorCode:'NETWORK_TIMEOUT'}),true);
   assert.equal(retryable({status:'failed',errorCode:'ACCOUNT_TIMEOUT'}),true);

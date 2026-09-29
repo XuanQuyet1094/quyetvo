@@ -47,7 +47,7 @@ jobs:
           const date = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
           const mode = process.env.EVENT_SCHEDULE === '0 8 * * *' ? 'retry' : (process.env.INPUT_MODE || 'morning');
           if (!['morning', 'retry'].includes(mode)) throw new Error('Invalid mode');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'date=' + date + '\\nmode=' + mode + '\\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'date=' + date + '\nmode=' + mode + '\n');
           NODE
 
   account_1:

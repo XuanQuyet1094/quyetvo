@@ -120,7 +120,7 @@ jobs:
           ACCOUNT_RECOVERY_EMAIL: ${{ secrets[format('ACCOUNT_{0}_RECOVERY_EMAIL', inputs.account)] }}
         run: node automation/.github/scripts/rewards-runner.cjs run
 
-      - name: Persist minimal private result
+      - name: Persist result and redacted private log
         if: ${{ always() && steps.claim.outputs.run == 'true' }}
         env:
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}

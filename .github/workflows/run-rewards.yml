@@ -57,7 +57,7 @@ jobs:
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 1
-      run_mode: ${{ needs.plan.outputs.mode }}
+      run_mode: ${{ github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only' && 'test' || needs.plan.outputs.mode }}
       run_date: ${{ needs.plan.outputs.date }}
       debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
     secrets: inherit

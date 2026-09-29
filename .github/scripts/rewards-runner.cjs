@@ -98,7 +98,7 @@ function childEnvironment(source, id) {
   });
   return env;
 }
-function configure() {
+function configure(diagnosticOnly = false) {
   accountSlot();
   const dir = process.env.BOT_DIR;
   const cfg = read(path.join(dir, 'config.example.json'));
@@ -109,6 +109,16 @@ function configure() {
   cfg.errorDiagnostics = false;
   cfg.debugLogs = false;
   cfg.sessionPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', 'sessions');
+  if (diagnosticOnly) {
+    cfg.ensureStreakProtection = false;
+    cfg.autoClaimPunchcardRewards = false;
+    if (cfg.workers && typeof cfg.workers === 'object') {
+      for (const key of Object.keys(cfg.workers)) cfg.workers[key] = false;
+    }
+    if (cfg.activities && typeof cfg.activities === 'object') {
+      for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
+    }
+  }
   if (cfg.consoleLogFilter) cfg.consoleLogFilter.enabled = false;
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;
@@ -289,6 +299,7 @@ function summaryMessage(jobs, env = process.env) {
 async function main() {
   switch (process.argv[2]) {
     case 'configure': configure(); break;
+    case 'configure-login-diagnostic': configure(true); break;
     case 'run': process.exitCode = await runAccount(); break;
     case 'report': await report(); break;
     case 'summary': await telegram(summaryMessage(JSON.parse(process.env.JOB_RESULTS))); break;

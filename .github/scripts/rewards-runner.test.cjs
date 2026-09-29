@@ -46,6 +46,7 @@ test('successful child yields verified balance and Daily Set completion', async 
   assert.equal(result.result.diagnostic.dailySet.completed, 3);
   assert.ok(!JSON.stringify(result.result).includes('synthetic-password'));
   assert.ok(result.privateLog.includes('DAILY_SET_VERIFICATION'));
+  assert.ok(result.privateLog.split('\n').length >= 3, 'captured records are newline-separated');
   assert.ok(!result.privateLog.includes('synthetic-password'));
   assert.ok(!result.privateLog.includes('JBSWY3DPEHPK3PXP'));
 });

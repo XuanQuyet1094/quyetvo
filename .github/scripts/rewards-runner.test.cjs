@@ -33,8 +33,8 @@ async function fakeBot(source, options = {}) {
   try {
     const code = await api.runAccount({command: process.execPath, args: ['-e', source], timeoutMs: 3000,
       killGraceMs: 20, ...options, env: {ACCOUNT_SLOT: '2', ACCOUNT_EMAIL: 'test@example.invalid',
-        RUNNER_TEMP: dir, BOT_DIR: dir, REPORT_PATH: path.join(dir, 'result.json')}});
-    return {code, result: JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8'))};
+        RUNNER_TEMP: dir, BOT_DIR: dir, ACCOUNT_PASSWORD: 'synthetic-password', ACCOUNT_TOTP_SECRET: 'JBSWY3DPEHPK3PXP', REPORT_PATH: path.join(dir, 'result.json')}});
+    return {code, result: JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8')), privateLog: fs.readFileSync(path.join(dir, 'rewards-private', 'account-2.log'), 'utf8')};
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 }
 test('successful child yields verified balance and Daily Set completion', async () => {
@@ -44,7 +44,10 @@ test('successful child yields verified balance and Daily Set completion', async 
   assert.equal(result.code, 0);
   assert.equal(result.result.pointsEarned, 159);
   assert.equal(result.result.diagnostic.dailySet.completed, 3);
-  assert.ok(!JSON.stringify(result).includes('synthetic-password'));
+  assert.ok(!JSON.stringify(result.result).includes('synthetic-password'));
+  assert.ok(result.privateLog.includes('DAILY_SET_VERIFICATION'));
+  assert.ok(!result.privateLog.includes('synthetic-password'));
+  assert.ok(!result.privateLog.includes('JBSWY3DPEHPK3PXP'));
 });
 test('exit zero with failed recovery result still fails', async () => {
   const result = await fakeBot(`console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify({...fixture, status: 'failed', pointsEarned: null, errorCode: 'FLOW_FAILED'})}));`);
@@ -78,4 +81,19 @@ test('summary distinguishes missing balances from zero', () => {
   const text = api.summaryMessage(jobs, {RUN_URL: 'https://github.com/example/repo/actions/runs/1'});
   assert.ok(text.includes('+159 (1/6'));
   assert.ok(text.includes('Chưa đủ số liệu 6 tài khoản'));
+});
+
+test('private log redactor removes tokens, auth headers, email, codes, and URL parameters while retaining trace', () => {
+  const safe = api.redactLog([
+    'Microsoft login error: Unknown Error for user@example.com',
+    'Authorization: Bearer top-secret-bearer',
+    'Set-Cookie: session=session-cookie-secret',
+    'OTP 123456',
+    'https://example.invalid/callback?code=private-oauth&state=private-state',
+    'TOTP secret is malformed'
+  ].join('\n'), {ACCOUNT_PASSWORD:'top-secret-bearer', ACCOUNT_TOTP_SECRET:'private-cookie', ACCOUNT_RECOVERY_EMAIL:'session-cookie-secret'});
+  for (const secret of ['user@example.com', 'top-secret-bearer', 'private-cookie', 'session-cookie-secret', '123456', 'private-oauth', 'private-state']) assert.ok(!safe.includes(secret));
+  assert.ok(safe.includes('Microsoft login error: Unknown Error'));
+  assert.ok(safe.includes('TOTP secret is malformed'));
+  assert.ok(safe.includes('https://example.invalid/callback?[REDACTED]'));
 });

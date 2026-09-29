@@ -126,3 +126,7 @@ jobs:
         run: |
           echo "Detailed redacted log is stored in the private Microsoft-Rewards-Script repository, branch rewards-state, under diagnostics/${{ steps.clock.outputs.date }}/ for account ${ACCOUNT_SLOT}."
           echo "This workflow does not update daily run state and does not run earning/search tasks."
+
+      - name: Mark diagnostic outcome
+        if: ${{ always() && steps.bot.outcome == 'failure' }}
+        run: exit 1

@@ -59,6 +59,7 @@ jobs:
           npm ci --include=dev
           npx --no-install patchright install --with-deps chromium
           npm run build
+          npm run test:auth
           test -f dist/index.js
 
       - name: Configure login-only mode

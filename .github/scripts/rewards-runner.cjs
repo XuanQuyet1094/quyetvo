@@ -229,7 +229,7 @@ function accountMessage(r, email, url) {
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
   const lines = [
     '🏆 <b>MICROSOFT REWARDS</b>',
-    `<b>${process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
+    `<b>${process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
     `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,

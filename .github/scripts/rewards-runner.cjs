@@ -119,6 +119,18 @@ function configure(diagnosticOnly = false) {
       for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
     }
   }
+  else if (process.env.RUN_MODE === 'test') {
+    cfg.ensureStreakProtection = false;
+    cfg.autoClaimPunchcardRewards = false;
+    if (cfg.workers && typeof cfg.workers === 'object') {
+      for (const key of Object.keys(cfg.workers)) cfg.workers[key] = false;
+      cfg.workers.doDailySet = true;
+    }
+    if (cfg.activities && typeof cfg.activities === 'object') {
+      for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
+      cfg.activities.urlReward = true;
+    }
+  }
   if (cfg.consoleLogFilter) cfg.consoleLogFilter.enabled = false;
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;

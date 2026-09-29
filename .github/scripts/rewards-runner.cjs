@@ -33,6 +33,38 @@ function read(file, fallback = null) {
 function save(file, value) {
   fs.writeFileSync(file, JSON.stringify(value), {mode: 0o600});
 }
+function redactLog(text, env = {}) {
+  let output = String(text).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  // Remove complete private-key blocks before applying individual environment values.
+  output = output.replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[REDACTED PRIVATE KEY]');
+  const sensitive = Object.entries(env)
+    .filter(([key, value]) => /PASSWORD|TOTP|RECOVERY_EMAIL|TOKEN|SECRET|SSH_KEY|COOKIE|AUTHORIZATION/i.test(key) && typeof value === 'string' && value.length >= 4)
+    .map(([, value]) => value)
+    .sort((a, b) => b.length - a.length);
+  for (const secret of sensitive) {
+    const variants = new Set([secret, secret.replace(/\r?\n/g, '\n'), secret.replace(/\r?\n/g, '')]);
+    for (const variant of variants) if (variant) output = output.split(variant).join('[REDACTED]');
+  }
+  return output
+    .replace(/(authorization\s*[:=]\s*(?:bearer|basic)\s+)\S+/ig, '$1[REDACTED]')
+    .replace(/((?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/ig, '$1[REDACTED]')
+    .replace(/(["']?(?:authorization|cookie|set-cookie|password|passwd|totp(?:_secret)?|access_token|refresh_token|client_secret|api_key)["']?\s*:\s*)("[^"]*"|'[^']*'|[^,\s}]+)/ig, '$1"[REDACTED]"')
+    .replace(/((?:password|passwd|totp(?:_secret)?|access_token|refresh_token|client_secret|api_key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^&\s,}]+)/ig, '$1[REDACTED]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[REDACTED TOKEN]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[REDACTED TOKEN]')
+    .replace(/\b\d{6,12}:[A-Za-z0-9_-]{25,}\b/g, '[REDACTED TOKEN]')
+    .replace(/(https?:\/\/)\S+:[^/@\s]+@/ig, '$1[REDACTED]@')
+    .replace(/\b\d{6}\b/g, '[REDACTED CODE]')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, '[REDACTED EMAIL]')
+    .replace(/(https?:\/\/[^\s?#]+)[?#][^\s]*/ig, '$1?[REDACTED]');
+}
+function captureLogPath(env, id) {
+  const root = env.RUNNER_TEMP;
+  if (!root) throw new Error('RUNNER_TEMP is required for private log capture');
+  const dir = path.join(root, 'rewards-private');
+  fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+  return path.join(dir, `account-${id}.log`);
+}
 function cleanResult(r, id) {
   if (!r || r.schema !== 1 || String(r.accountId) !== String(id)) return null;
   const start = Date.parse(r.startedAt), end = Date.parse(r.finishedAt);
@@ -130,9 +162,21 @@ async function runAccount(options = {}) {
   process.on('SIGINT', onSignal);
   const timeout = setTimeout(() => stop('ACCOUNT_TIMEOUT'), options.timeoutMs ?? 75 * 60000);
   const heartbeat = setInterval(() => console.log(`Account ${id}/6: running; raw logs remain private.`), 60000);
-  for (const stream of [child.stdout, child.stderr]) {
+  const privateLogPath = captureLogPath(source, id);
+  const privateLog = fs.createWriteStream(privateLogPath, {flags: 'w', mode: 0o600});
+  const maxRawLogBytes = 2 * 1024 * 1024;
+  let rawLogBytes = 0, logTruncated = false;
+  for (const [name, stream] of [['stdout', child.stdout], ['stderr', child.stderr]]) {
     readline.createInterface({input: stream}).on('line', line => {
-      // Never echo raw lines: they may contain account details or browser cookies.
+      const record = `[${name}] ${line}\\n`;
+      const size = Buffer.byteLength(record);
+      if (rawLogBytes + size <= maxRawLogBytes) {
+        privateLog.write(record);
+        rawLogBytes += size;
+      } else {
+        logTruncated = true;
+      }
+      // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
       const at = line.indexOf(marker);
@@ -147,6 +191,15 @@ async function runAccount(options = {}) {
     child.on('error', () => { stopped = 'PROCESS_FAILED'; });
     child.on('close', (code, signal) => resolve({code, signal}));
   });
+  await new Promise(resolve => privateLog.end(resolve));
+  let logText = redactLog(fs.readFileSync(privateLogPath, 'utf8'), source);
+  if (logTruncated) logText += '\\n[Log truncated after the 2 MiB capture limit.]\\n';
+  const maxSafeLogBytes = 900 * 1024;
+  if (Buffer.byteLength(logText) > maxSafeLogBytes) {
+    logText = Buffer.from(logText).subarray(-maxSafeLogBytes).toString('utf8');
+    logText = '[Earlier log lines omitted to fit the 900 KiB private log limit.]\\n' + logText;
+  }
+  fs.writeFileSync(privateLogPath, logText, {mode: 0o600});
   clearTimeout(timeout);
   clearTimeout(killTimer);
   clearInterval(heartbeat);
@@ -248,7 +301,7 @@ async function main() {
     default: throw new Error('Invalid operation');
   }
 }
-module.exports = {number, cleanResult, childEnvironment, runAccount, accountMessage, summaryMessage, telegram};
+module.exports = {number, cleanResult, childEnvironment, redactLog, runAccount, accountMessage, summaryMessage, telegram};
 if (require.main === module) main().catch(() => {
   console.error('Automation step failed. Check setup or Telegram delivery; sensitive details were suppressed.');
   process.exitCode = 1;

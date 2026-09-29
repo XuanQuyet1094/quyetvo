@@ -59,7 +59,7 @@ function context() {
   const date = process.env.RUN_DATE;
   const slot = Number(process.env.ACCOUNT_SLOT);
   const mode = process.env.RUN_MODE;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry'].includes(mode)) throw new Error('Invalid state context');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic'].includes(mode)) throw new Error('Invalid state context');
   return {date, slot, mode, file: `/contents/state/${date}/account-${slot}.json`};
 }
 async function get(ctx) {
@@ -108,7 +108,8 @@ function privateLogLocation(ctx) {
   const runId = process.env.GITHUB_RUN_ID;
   const attempt = process.env.GITHUB_RUN_ATTEMPT;
   if (!/^\d+$/.test(runId || '') || !/^\d+$/.test(attempt || '')) throw new Error('Invalid run reference');
-  return `logs/${ctx.date}/account-${ctx.slot}-run-${runId}-attempt-${attempt}.log`;
+  const folder = ctx.mode === 'diagnostic' ? 'diagnostics' : 'logs';
+  return `${folder}/${ctx.date}/account-${ctx.slot}-run-${runId}-attempt-${attempt}.log`;
 }
 async function uploadPrivateLog(ctx) {
   if (!process.env.REWARDS_STATE_TOKEN || !process.env.RUNNER_TEMP) return null;
@@ -150,7 +151,15 @@ async function finish() {
 }
 module.exports = {retryable, eligible, stateResult, claim, finish};
 if (require.main === module) {
-  const task = process.argv[2] === 'claim' ? claim : process.argv[2] === 'finish' ? finish : null;
+  const task = process.argv[2] === 'claim' ? claim :
+    process.argv[2] === 'finish' ? finish :
+    process.argv[2] === 'upload-log' ? async () => {
+      const ctx = context();
+      if (ctx.mode !== 'diagnostic') throw new Error('upload-log is only for diagnostic runs');
+      const location = await uploadPrivateLog(ctx);
+      if (!location) throw new Error('Private diagnostic log was not available');
+      console.log('Private diagnostic log saved: ' + location);
+    } : null;
   if (!task) process.exitCode = 1;
   else task().catch(() => {
     console.error('State operation failed; bot will not be retried blindly. Check REWARDS_STATE_TOKEN (Contents: read/write on private repo) and rewards-state branch.');

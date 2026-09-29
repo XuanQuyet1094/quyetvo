@@ -12,13 +12,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: rewards-login-diagnostic-${{ inputs.account }}
-  cancel-in-progress: false
-
 jobs:
   diagnose:
-    name: Login diagnostic · account ${{ inputs.account }}
+    name: Login diagnostic (single account)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:

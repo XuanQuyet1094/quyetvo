@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const path = require('node:path');
 const REPO = 'XuanQuyet1094/Microsoft-Rewards-Script';
 const BRANCH = 'rewards-state';
 const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
@@ -103,6 +104,33 @@ async function claim() {
   await put(ctx, state, sha); // SHA conflict fails closed instead of launching a duplicate.
   output('stored', 'true'); output('run', 'true');
 }
+function privateLogLocation(ctx) {
+  const runId = process.env.GITHUB_RUN_ID;
+  const attempt = process.env.GITHUB_RUN_ATTEMPT;
+  if (!/^\d+$/.test(runId || '') || !/^\d+$/.test(attempt || '')) throw new Error('Invalid run reference');
+  return `logs/${ctx.date}/account-${ctx.slot}-run-${runId}-attempt-${attempt}.log`;
+}
+async function uploadPrivateLog(ctx) {
+  if (!process.env.REWARDS_STATE_TOKEN || !process.env.RUNNER_TEMP) return null;
+  const localPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', `account-${ctx.slot}.log`);
+  let content;
+  try { content = fs.readFileSync(localPath, 'utf8'); } catch { return null; }
+  // Keep GitHub Contents API payload well below its size limit.
+  const maxBytes = 900 * 1024;
+  if (Buffer.byteLength(content) > maxBytes) {
+    content = Buffer.from(content).subarray(-maxBytes).toString('utf8');
+    content = '[Earlier log lines omitted to fit the private storage limit.]\n' + content;
+  }
+  const location = privateLogLocation(ctx);
+  const route = `/contents/${location.split('/').map(encodeURIComponent).join('/')}?ref=${BRANCH}`;
+  const existing = await api(route, {}, true);
+  const body = {branch: BRANCH, message: `Save redacted ${ctx.date} account ${ctx.slot} ${ctx.mode} log`,
+    content: Buffer.from(content, 'utf8').toString('base64')};
+  if (existing?.sha) body.sha = existing.sha;
+  const putRoute = `/contents/${location.split('/').map(encodeURIComponent).join('/')}`;
+  await api(putRoute, {method: 'PUT', body: JSON.stringify(body)});
+  return location;
+}
 async function finish() {
   if (process.env.STATE_STORED !== 'true') return;
   const ctx = context();
@@ -113,9 +141,12 @@ async function finish() {
   try { result = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, 'utf8')); }
   catch { result = {status: 'failed', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'}; }
   if (result.accountId !== undefined && Number(result.accountId) !== ctx.slot) throw new Error('Wrong account result');
-  state[ctx.mode] = {...entry, ...stateResult(result), finishedAt: new Date().toISOString()};
+  let logPath = null;
+  try { logPath = await uploadPrivateLog(ctx); }
+  catch { console.error('Private bot log upload failed; private status will still be saved.'); }
+  state[ctx.mode] = {...entry, ...stateResult(result), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
   await put(ctx, state, sha);
-  console.log('Minimal result saved to private state branch.');
+  console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }
 module.exports = {retryable, eligible, stateResult, claim, finish};
 if (require.main === module) {

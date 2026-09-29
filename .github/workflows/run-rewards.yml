@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       run_mode:
-        description: Morning run or retry only eligible failures today
+        description: Morning or retry mode; account 1 test mode runs Daily Set only
         type: choice
         options: [morning, retry]
         default: morning
       run_scope:
-        description: Run all six accounts, or only account 1 for testing
+        description: Run all six accounts, or test only account 1 Daily Set
         type: choice
         options: [all, account_1_only]
         default: all

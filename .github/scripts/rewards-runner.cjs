@@ -168,7 +168,7 @@ async function runAccount(options = {}) {
   let rawLogBytes = 0, logTruncated = false;
   for (const [name, stream] of [['stdout', child.stdout], ['stderr', child.stderr]]) {
     readline.createInterface({input: stream}).on('line', line => {
-      const record = `[${name}] ${line}\\n`;
+      const record = `[${name}] ${line}\n`;
       const size = Buffer.byteLength(record);
       if (rawLogBytes + size <= maxRawLogBytes) {
         privateLog.write(record);
@@ -193,11 +193,11 @@ async function runAccount(options = {}) {
   });
   await new Promise(resolve => privateLog.end(resolve));
   let logText = redactLog(fs.readFileSync(privateLogPath, 'utf8'), source);
-  if (logTruncated) logText += '\\n[Log truncated after the 2 MiB capture limit.]\\n';
+  if (logTruncated) logText += '\n[Log truncated after the 2 MiB capture limit.]\n';
   const maxSafeLogBytes = 900 * 1024;
   if (Buffer.byteLength(logText) > maxSafeLogBytes) {
     logText = Buffer.from(logText).subarray(-maxSafeLogBytes).toString('utf8');
-    logText = '[Earlier log lines omitted to fit the 900 KiB private log limit.]\\n' + logText;
+    logText = '[Earlier log lines omitted to fit the 900 KiB private log limit.]\n' + logText;
   }
   fs.writeFileSync(privateLogPath, logText, {mode: 0o600});
   clearTimeout(timeout);

@@ -1,7 +1,13 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const REPO = 'XuanQuyet1094/Microsoft-Rewards-Script';
+function privateRepository() {
+  const value = process.env.REWARDS_PRIVATE_REPO || '';
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error('Missing or invalid REWARDS_PRIVATE_REPO');
+  }
+  return value;
+}
 const BRANCH = 'rewards-state';
 const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 const transient = new Set(['NETWORK_TIMEOUT', 'ACCOUNT_TIMEOUT', 'HTTP_408', 'HTTP_425', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504']);
@@ -46,7 +52,7 @@ function stateResult(r) {
   return result;
 }
 async function api(route, options = {}, allow404 = false) {
-  const response = await fetch(`https://api.github.com/repos/${REPO}${route}`, {
+  const response = await fetch(`https://api.github.com/repos/${privateRepository()}${route}`, {
     ...options, headers: {Authorization: `Bearer ${process.env.REWARDS_STATE_TOKEN}`,
       Accept: 'application/vnd.github+json', 'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28'}, signal: AbortSignal.timeout(20000)

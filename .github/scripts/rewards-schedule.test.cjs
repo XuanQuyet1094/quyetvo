@@ -5,25 +5,25 @@ const {MORNING, RETRY, planRun, canStart, deadline} = require('./rewards-schedul
 const at = time => Date.parse('2026-10-06T' + time + '+07:00');
 const env = cron => ({GITHUB_EVENT_NAME: 'schedule', EVENT_SCHEDULE: cron});
 test('UTC cron maps to correct Vietnam date and mode', () => {
-  assert.deepEqual(planRun(env(MORNING), '2026-10-05T21:17:00Z', at('04:20:00')),
+  assert.deepEqual(planRun(env(MORNING), '2026-10-05T19:17:00Z', at('02:20:00')),
     {date: '2026-10-06', mode: 'morning', run: true});
-  assert.equal(planRun(env(RETRY), '2026-10-06T07:37:00Z', at('14:40:00')).mode, 'retry');
+  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('12:40:00')).mode, 'retry');
 });
 test('late scheduled starts are skipped even on the same date', () => {
-  assert.equal(planRun(env(MORNING), '2026-10-05T21:17:00Z', at('10:00:00')).run, false);
-  assert.equal(planRun(env(RETRY), '2026-10-06T07:37:00Z', at('16:00:00')).run, false);
+  assert.equal(planRun(env(MORNING), '2026-10-05T19:17:00Z', at('10:00:00')).run, false);
+  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('16:00:00')).run, false);
   assert.equal(planRun(env(MORNING), '2026-10-06T16:42:00Z', at('23:42:00')).run, false);
 });
 test('queued run across midnight retains original date and is not started', () => {
-  const result = planRun(env(RETRY), '2026-10-05T07:37:00Z', at('14:40:00'));
+  const result = planRun(env(RETRY), '2026-10-05T05:37:00Z', at('12:40:00'));
   assert.equal(result.date, '2026-10-05');
   assert.equal(result.run, false);
 });
 test('remaining daily budget refuses late accounts without reducing a full morning run', () => {
-  assert.equal(canStart('2026-10-06', at('04:17:00')), true);
+  assert.equal(canStart('2026-10-06', at('02:17:00')), true);
   assert.equal(canStart('2026-10-06', at('21:00:00')), true);
   assert.equal(canStart('2026-10-06', at('21:00:01')), false);
-  assert.equal(canStart('2026-10-05', at('04:17:00')), false);
+  assert.equal(canStart('2026-10-05', at('02:17:00')), false);
   assert.equal(deadline('2026-10-06'), at('22:30:00'));
 });
 test('manual runs preserve selected mode but cannot bypass date or daily deadline', () => {

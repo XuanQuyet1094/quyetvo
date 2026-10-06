@@ -1,6 +1,6 @@
 # Daily recovery workflow
 
-Schedule (Vietnam time): 04:17 morning, 14:37 technical-failure recovery. Scheduled morning plans may start before 10:00; retry plans before 16:00. Later queued schedules are skipped. GitHub may queue jobs; both modes use the same concurrency group. Manual dispatch selects `morning` or `retry`.
+Schedule (Vietnam time): 02:17 morning, 12:37 technical-failure recovery. Scheduled morning plans may start before 10:00; retry plans before 16:00. Later queued schedules are skipped. GitHub may queue jobs; both modes use the same concurrency group. Manual dispatch selects `morning` or `retry`.
 
 ## One-time setup
 

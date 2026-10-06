@@ -58,3 +58,5 @@ jobs:
         run: node automation/.github/scripts/rewards-state.cjs upload-log
 
 # Verify isolated reading fallback and balance evidence after the dashboard fix.
+
+# Verify aligned type-101 request fields before a bounded live protocol comparison.

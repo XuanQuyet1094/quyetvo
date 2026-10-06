@@ -130,7 +130,7 @@ function diagnose(line) {
     [/Microsoft login error: Unknown Error/, 'MICROSOFT_LOGIN_UNKNOWN_ERROR'],
     [/Microsoft login error:/, 'MICROSOFT_LOGIN_ERROR'],
     [/Login alert disappeared before handling/, 'TRANSIENT_LOGIN_ALERT'],
-    [/Password input detected but no password is configured/, 'PASSWORD_NOT_CONFIGURED'],
+    [/Password input detected but no password is configured|PASSWORD_NOT_CONFIGURED/, 'PASSWORD_NOT_CONFIGURED'],
     [/Executable doesn't exist/, 'BROWSER_EXECUTABLE_MISSING'],
     [/error while loading shared libraries/, 'BROWSER_LIBRARY_MISSING'],
     [/Missing X server|without having a XServer/, 'DISPLAY_MISSING'],

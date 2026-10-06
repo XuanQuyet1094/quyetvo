@@ -202,15 +202,37 @@ test('user-authorized reading continuation is bounded and requires an explicit r
 test('reading budget subtracts only verified private receipts and stops at the daily target',async(t)=>{
  t.mock.method(Date,'now',()=>Date.parse('2026-10-07T00:10:00+07:00'));
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reading-budget-')),prev={...process.env},oldFetch=global.fetch;
- let state={schema:1,date:'2026-10-07',accountId:1,'app-read-test':{status:'failed',errorCode:'HTTP_401',runId:'101',runAttempt:'1',history:[{runId:'100',runAttempt:'1'}]}},puts=0;
- const receipts={'100':{date:state.date,accountId:1,pointsEarned:3,initialBalance:100,finalBalance:103},'101':{date:state.date,accountId:1,pointsEarned:3,initialBalance:103,finalBalance:106}};
+ let state={schema:1,date:'2026-10-07',accountId:3,'app-read-test':{status:'failed',errorCode:'HTTP_401',runId:'101',runAttempt:'1',history:[{runId:'100',runAttempt:'1'}]}},puts=0;
+ const receipts={'100':{date:state.date,accountId:3,pointsEarned:3,initialBalance:100,finalBalance:103},'101':{date:state.date,accountId:3,pointsEarned:3,initialBalance:103,finalBalance:106}};
  try{
- Object.assign(process.env,{RUN_DATE:state.date,ACCOUNT_SLOT:'1',RUN_MODE:'app-read-test',RUNNER_TEMP:dir,REWARDS_STATE_TOKEN:'fixture',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'102',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(dir,'out')});
+ Object.assign(process.env,{RUN_DATE:state.date,ACCOUNT_SLOT:'3',RUN_MODE:'app-read-test',RUNNER_TEMP:dir,REWARDS_STATE_TOKEN:'fixture',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'102',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(dir,'out')});
  global.fetch=async(url,options={})=>{let body;if(options.method==='PUT'){state=JSON.parse(Buffer.from(JSON.parse(options.body).content,'base64'));puts++;body={};}else if(url.includes('/reports/')){const id=/run-(\d+)-attempt/.exec(url)[1];body={sha:'fixture',content:Buffer.from(JSON.stringify(receipts[id])).toString('base64')};}else if(url.endsWith('/example/private-state'))body={private:true};else if(url.includes('/branches/'))body={name:'rewards-state'};else body={sha:'fixture',content:Buffer.from(JSON.stringify(state)).toString('base64')};return {ok:true,status:200,json:async()=>body};};
  await claim();assert.equal(puts,1);assert.equal(state['app-read-test'].readingPointsBudget,24);
  const budget=JSON.parse(fs.readFileSync(path.join(dir,'rewards-private/reading-budget.json')));
- assert.equal(budget.points,24);assert.equal(budget.accountId,1);
- const env=require('./rewards-runner.cjs').childEnvironment({...process.env,ACCOUNT_EMAIL:'fixture@example.invalid'},1);
+ assert.equal(budget.points,24);assert.equal(budget.accountId,3);
+ const env=require('./rewards-runner.cjs').childEnvironment({...process.env,ACCOUNT_EMAIL:'fixture@example.invalid'},3);
  assert.equal(env.REWARDS_READING_POINTS_BUDGET,'24');
  }finally{global.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in prev))delete process.env[k];Object.assign(process.env,prev);fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('reading experiments are restricted to the two user-authorized accounts', async(t)=>{
+ t.mock.method(Date,'now',()=>Date.parse('2026-10-07T04:40:00+07:00'));
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reading-slots-')),prev={...process.env},oldFetch=global.fetch;
+ let slot=1,puts=0;
+ try {
+  Object.assign(process.env,{RUN_DATE:'2026-10-07',RUN_MODE:'app-read-test',RUNNER_TEMP:dir,REWARDS_STATE_TOKEN:'fixture',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'200',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(dir,'out')});
+  global.fetch=async(url,options={})=>{
+   let body;
+   if(options.method==='PUT'){const saved=JSON.parse(Buffer.from(JSON.parse(options.body).content,'base64'));assert.equal(saved.accountId,slot);puts++;body={};}
+   else if(url.endsWith('/example/private-state'))body={private:true};
+   else if(url.includes('/branches/'))body={name:'rewards-state'};
+   else body={sha:'fixture',content:Buffer.from(JSON.stringify({schema:1,date:'2026-10-07',accountId:slot})).toString('base64')};
+   return {ok:true,status:200,json:async()=>body};
+  };
+  for(slot of [2,4,5,6]){process.env.ACCOUNT_SLOT=String(slot);await claim();assert.equal(puts,0);}
+  for(slot of [1,3]){process.env.ACCOUNT_SLOT=String(slot);await claim();}
+  assert.equal(puts,2);
+  const budget=JSON.parse(fs.readFileSync(path.join(dir,'rewards-private/reading-budget.json')));
+  assert.equal(budget.accountId,3);assert.equal(budget.points,30);
+ } finally {global.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in prev))delete process.env[k];Object.assign(process.env,prev);fs.rmSync(dir,{recursive:true,force:true});}
 });

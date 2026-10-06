@@ -1,0 +1,28 @@
+name: App reading verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/app-reading-test.yml']
+permissions:
+  contents: read
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+    steps:
+      - id: plan
+        run: echo "date=$(TZ=Asia/Ho_Chi_Minh date +%F)" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: plan
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      run_mode: app-read-test
+      run_date: ${{ needs.plan.outputs.date }}
+    secrets: inherit

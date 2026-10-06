@@ -127,6 +127,7 @@ async function quietBuild(env = process.env, commands) {
     ['Dependencies','npm',['ci','--include=dev']],
     ['Browser','npx',['--no-install','patchright','install','--with-deps','chromium']],
     ['Build','npm',['run','build']],
+    ...(['app-test','app-auth-probe'].includes(env.RUN_MODE) ? [['App verification tests','node',['--test','scripts/main/appAuth.test.cjs']]] : []),
     ...(env.RUN_MODE === 'diagnostic' ? [['Authentication tests','npm',['run','test:auth']]] : [])
   ]) {
     const child = spawn(command,args,{cwd:env.BOT_DIR,env,stdio:['ignore','pipe','pipe']});

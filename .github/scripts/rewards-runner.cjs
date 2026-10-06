@@ -122,20 +122,21 @@ function configure(diagnosticOnly = false) {
       for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
     }
   }
-  else if (['test', 'app-test'].includes(process.env.RUN_MODE)) {
+  else if (['test', 'app-test', 'app-read-test'].includes(process.env.RUN_MODE)) {
     cfg.ensureStreakProtection = false;
     cfg.autoClaimPunchcardRewards = false;
     if (cfg.workers && typeof cfg.workers === 'object') {
       for (const key of Object.keys(cfg.workers)) cfg.workers[key] = false;
       cfg.workers.doDailySet = process.env.RUN_MODE === 'test';
       cfg.workers.doDailyCheckIn = process.env.RUN_MODE === 'app-test';
+      cfg.workers.doReadToEarn = process.env.RUN_MODE === 'app-read-test';
     }
     if (cfg.activities && typeof cfg.activities === 'object') {
       for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
       cfg.activities.urlReward = process.env.RUN_MODE === 'test';
     }
   }
-  if (['app-test', 'app-auth-probe'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
+  if (['app-test', 'app-auth-probe', 'app-read-test'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
   if (cfg.consoleLogFilter) cfg.consoleLogFilter.enabled = false;
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;
@@ -165,7 +166,7 @@ async function runAccount(options = {}) {
     result.diagnostic = diagnostic;
     if (source.RUN_MODE === 'app-test') result.appCheckInVerified = appCheckInVerified;
     if (source.RUN_MODE === 'app-auth-probe') result.appAuthVerified = appAuthVerified;
-    result.appCheckIn = ['test', 'diagnostic', 'app-auth-probe'].includes(source.RUN_MODE) ? 'not_requested'
+    result.appCheckIn = ['test', 'diagnostic', 'app-auth-probe', 'app-read-test'].includes(source.RUN_MODE) ? 'not_requested'
       : appCheckInVerified ? 'verified' : appAuthRejected ? 'auth_rejected' : appCheckInAttempted ? 'unverified' : 'unknown';
     result.exitCode = number(code);
     result.signal = ['SIGTERM', 'SIGKILL', 'SIGINT'].includes(signal) ? signal : null;
@@ -179,7 +180,7 @@ async function runAccount(options = {}) {
   }
   let remaining = Infinity;
   if (source.RUN_DATE) {
-    remaining = schedule.deadline(source.RUN_DATE) - started;
+    remaining = schedule.deadline(source.RUN_DATE, source.RUN_MODE) - started;
     if (source.RUN_DATE !== schedule.dateVN(started) || remaining <= 0) {
       stopped = 'DAILY_WINDOW_EXPIRED';
       persist(1, null);
@@ -203,7 +204,7 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? (['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
+  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'app-read-test' ? 8 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
@@ -292,7 +293,7 @@ function accountMessage(r, email, url) {
     lines.push(`📍 <b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
     if (r.diagnostic.errors.length) lines.push(`🛠️ <b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
   }
-  lines.push('', ['test','app-test','diagnostic'].includes(process.env.RUN_MODE) ? '🔬 Đã kết thúc lượt kiểm tra riêng.' : r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
+  lines.push('', ['test','app-test','app-read-test','diagnostic'].includes(process.env.RUN_MODE) ? '🔬 Đã kết thúc lượt kiểm tra riêng.' : r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
   lines.push(`<a href="${html(url)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }

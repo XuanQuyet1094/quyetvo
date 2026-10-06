@@ -226,7 +226,7 @@ async function runAccount(options = {}) {
       if (line.includes('[APP-AUTH-PROBE] Stable read confirmed') && line.includes('successfulReads=2')) appAuthVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Starting Daily Check-In')) appCheckInAttempted = true;
-      if (/\[(GET-APP-DASHBOARD-DATA|GET-APP-EARNABLE-POINTS)\]/.test(line) && /status code 401/.test(line)) appAuthRejected = true;
+      if (/\[(GET-APP-DASHBOARD-DATA|GET-APP-EARNABLE-POINTS|DAILY-CHECK-IN)\]/.test(line) && /status code 401/.test(line)) appAuthRejected = true;
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
       const at = line.indexOf(marker);
       if (at < 0) return;

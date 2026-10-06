@@ -115,7 +115,7 @@ async function claim() {
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
       (ctx.mode === 'app-read-test' && (ctx.slot !== 1 || (state['app-read-test'] &&
         (state['app-read-test'].status === 'running' || state['app-read-test'].errorCode !== 'HTTP_401' ||
-         (state['app-read-test'].history || []).length >= 1)))) ||
+         (state['app-read-test'].history || []).length >= 3)))) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
         (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
          ((state['app-test'].history || []).length >= (appReadObserved ? 8 : 2) && state['app-test'].errorCode !== 'SETUP_FAILED') ||

@@ -105,7 +105,9 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
-  if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || state['app-auth-probe'])) ||
+  if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
+        (state['app-auth-probe'].status === 'running' || state['app-auth-probe'].authVerified === true ||
+         (state['app-auth-probe'].history || []).length >= 2)))) ||
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
@@ -115,7 +117,7 @@ async function claim() {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
-  const history = ctx.mode === 'app-test' && state[ctx.mode]
+  const history = ['app-test', 'app-auth-probe'].includes(ctx.mode) && state[ctx.mode]
     ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
   state[ctx.mode] = {...(history.length ? {history} : {}), status: 'running', retryable: false, errorCode: null,
     runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
@@ -166,7 +168,7 @@ async function finish() {
   catch { console.error('Private bot log upload failed; private status will still be saved.'); }
   try { await uploadPrivateLog(ctx, 'setup'); }
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
-  state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
+  state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }

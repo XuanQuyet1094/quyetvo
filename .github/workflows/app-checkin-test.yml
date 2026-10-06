@@ -37,3 +37,5 @@ jobs:
       run_mode: app-test
       run_date: ${{ needs.plan.outputs.date }}
     secrets: inherit
+
+# Retest app identity correction; at most two App-only attempts per Vietnam day.

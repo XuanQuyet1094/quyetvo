@@ -19,7 +19,7 @@ const dateVN = () => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Ho_Chi_Mi
 const errors = new Set(['ACCOUNT_LOCKED', 'BOT_WARNING', 'AUTH_REQUIRED', 'NETWORK_TIMEOUT',
   'DASHBOARD_UNAVAILABLE', 'FLOW_FAILED', 'BALANCE_UNVERIFIED', 'STALE_RUN_DATE',
   'INVALID_ACCOUNT_SELECTION', 'MISSING_ACCOUNT_EMAIL', 'PROCESS_FAILED', 'NO_FINAL_RESULT',
-  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED', 'APP_CHECKIN_UNVERIFIED']);
+  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED', 'APP_CHECKIN_UNVERIFIED', 'APP_AUTH_PROBE_FAILED']);
 function errorLabel(value) {
   return errors.has(value) || /^HTTP_[45]\d\d$/.test(String(value)) ? value : value ? 'FLOW_FAILED' : null;
 }
@@ -94,12 +94,14 @@ function childEnvironment(source, id) {
     [`ACCOUNT_${id}_GEO_LOCALE`]: 'VN', [`ACCOUNT_${id}_LANG_CODE`]: 'vi',
     [`ACCOUNT_${id}_PROXY_HTTP`]: 'true',
     [`ACCOUNT_${id}_PROXY_URL`]: 'socks5://127.0.0.1', [`ACCOUNT_${id}_PROXY_PORT`]: '1080',
+    REWARDS_APP_AUTH_PROBE: source.RUN_MODE === 'app-auth-probe' ? 'true' : 'false',
     REWARDS_ACCOUNT_IDS: String(id),
     REWARDS_REPORT_DIR: path.join(source.RUNNER_TEMP, 'rewards-private')
   });
   return env;
 }
 function configure(diagnosticOnly = false) {
+  diagnosticOnly = diagnosticOnly || process.env.RUN_MODE === 'app-auth-probe';
   accountSlot();
   const dir = process.env.BOT_DIR;
   const cfg = read(path.join(dir, 'config.example.json'));
@@ -133,7 +135,7 @@ function configure(diagnosticOnly = false) {
       cfg.activities.urlReward = process.env.RUN_MODE === 'test';
     }
   }
-  if (process.env.RUN_MODE === 'app-test' && cfg.experimental) cfg.experimental.edgeBrowsing = false;
+  if (['app-test', 'app-auth-probe'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
   if (cfg.consoleLogFilter) cfg.consoleLogFilter.enabled = false;
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;
@@ -148,10 +150,11 @@ async function runAccount(options = {}) {
   const diagnostic = {stage: 'STARTING', loginState: null, errors: [], dailySet: null};
   const diagnose = createDiagnostics(diagnostic);
   const started = Date.now();
-  let last = null, stopped = null, appCheckInVerified = false;
+  let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
   function persist(code, signal) {
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
+    if (source.RUN_MODE === 'app-auth-probe' && !appAuthVerified && !stopped) stopped = 'APP_AUTH_PROBE_FAILED';
     if (source.RUN_MODE === 'app-test' && !appCheckInVerified && !stopped) stopped = 'APP_CHECKIN_UNVERIFIED';
     if (stopped || code !== 0 || signal || !result.finished) {
       result.status = 'failed';
@@ -196,7 +199,7 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? 75 * 60000;
+  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'app-auth-probe' ? 10 : 75) * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
@@ -216,6 +219,7 @@ async function runAccount(options = {}) {
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
+      if (line.includes('[APP-AUTH-PROBE] Result') && line.includes('valid=true')) appAuthVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
       const at = line.indexOf(marker);

@@ -57,12 +57,4 @@ jobs:
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs upload-log
 
-# Verify isolated reading fallback and balance evidence after the dashboard fix.
-
-# Verify aligned type-101 request fields before a bounded live protocol comparison.
-
-# Verify quota reconciliation and bounded reading continuation requested by the owner.
-
-# Verify refreshed OAuth credentials and exact remaining reading-credit budget.
-
-# Verify reading budget also applies to scheduled work without repeating credited points.
+# Verify scheduled token renewal after the account 3 reading-only experiment credited 30 points in one run.

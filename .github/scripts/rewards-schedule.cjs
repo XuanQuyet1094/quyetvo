@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('node:fs');
-const MORNING = '17 21 * * *'; // 04:17 Vietnam
-const RETRY = '37 7 * * *'; // 14:37 Vietnam
+const MORNING = '17 19 * * *'; // 02:17 Vietnam
+const RETRY = '37 5 * * *'; // 12:37 Vietnam
 const dateVN = ms => new Date(ms + 7 * 3600000).toISOString().slice(0, 10);
 function deadline(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
@@ -20,7 +20,7 @@ function planRun(env, createdAt, now = Date.now()) {
   if (!['morning', 'retry'].includes(mode)) throw new Error('Invalid mode');
   const local = new Date(now + 7 * 3600000);
   const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
-  const inWindow = !scheduled || (mode === 'morning' ? minutes >= 257 && minutes < 600 : minutes >= 877 && minutes < 960);
+  const inWindow = !scheduled || (mode === 'morning' ? minutes >= 137 && minutes < 600 : minutes >= 757 && minutes < 960);
   return {date, mode, run: canStart(date, now) && inWindow};
 }
 async function plan(env = process.env, fetchFn = fetch, now = Date.now()) {

@@ -105,6 +105,8 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
+  const probe = state['app-auth-probe'];
+  const appReadObserved = probe?.authVerified === true || (probe?.history || []).some(entry => entry.authVerified === true);
   if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
         (state['app-auth-probe'].status === 'running' || state['app-test']?.checkInVerified === true ||
          (state['app-auth-probe'].history || []).length >= 3)))) ||
@@ -113,7 +115,7 @@ async function claim() {
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
         (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
-         (state['app-test'].history || []).length >= (state['app-auth-probe']?.authVerified === true ? 5 : 2)))))) {
+         (state['app-test'].history || []).length >= (appReadObserved ? 7 : 2)))))) {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.

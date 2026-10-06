@@ -56,6 +56,11 @@ test('exit zero with failed recovery result still fails', async () => {
   assert.equal(result.result.errorCode, 'FLOW_FAILED');
   assert.equal(result.result.pointsEarned, null);
 });
+test('a completed web flow retains rejected App authentication separately', async () => {
+ const result=await fakeBot(`console.log('[ERROR] MOBILE [GET-APP-DASHBOARD-DATA] Error fetching dashboard data: Request failed with status code 401');console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify(fixture)}));`);
+ assert.equal(result.code,0);assert.equal(result.result.status,'completed');assert.equal(result.result.appCheckIn,'auth_rejected');
+ assert.ok(api.accountMessage(result.result,'fixture@example.invalid','https://example.invalid').includes('Chưa thực hiện · API từ chối 401'));
+});
 test('missing final result and timeout are not successful', async () => {
   const empty = await fakeBot('process.exit(0)');
   assert.equal(empty.code, 1);
@@ -69,6 +74,9 @@ test('Telegram report escapes account identity and does not claim all daily poin
   assert.ok(text.includes('a&amp;b@example.invalid'));
   assert.ok(text.includes('<b>Daily Set:</b> Chưa xác minh'));
   assert.ok(text.includes('+159'));
+  assert.ok(text.includes('<b>App check-in:</b> Chưa xác minh'));
+  const rejected = api.accountMessage({...api.cleanResult(fixture,2),appCheckIn:'auth_rejected'},'fixture@example.invalid','https://example.invalid');
+  assert.ok(rejected.includes('Chưa thực hiện · API từ chối 401'));
   let calls = 0;
   await api.telegram(text, {TELEGRAM_BOT_TOKEN: 'test', TELEGRAM_CHAT_ID: '1'}, async (_, init) => {
     calls++;

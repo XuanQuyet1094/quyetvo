@@ -41,3 +41,5 @@ jobs:
 # Retest app identity correction; at most three App-only attempts per Vietnam day.
 
 # Verify Android dashboard fallback independently of iOS rejection.
+
+# Compare fresh Live token exchanges after the initial read-only matrix.

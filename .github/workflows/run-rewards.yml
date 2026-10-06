@@ -18,11 +18,12 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 0 * * *' # 07:00 Vietnam
-    - cron: '0 8 * * *' # 15:00 Vietnam: retry technical failures only
+    - cron: '17 21 * * *' # 04:17 Vietnam
+    - cron: '37 7 * * *' # 14:37 Vietnam: retry technical failures only
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: rewards-accounts-1-6
@@ -35,25 +36,26 @@ jobs:
     outputs:
       date: ${{ steps.plan.outputs.date }}
       mode: ${{ steps.plan.outputs.mode }}
+      run: ${{ steps.plan.outputs.run }}
     steps:
-      - name: Select Vietnam date and run mode
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate original Vietnam date and execution window
         id: plan
         env:
           EVENT_SCHEDULE: ${{ github.event.schedule }}
           INPUT_MODE: ${{ inputs.run_mode }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const date = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-          const mode = process.env.EVENT_SCHEDULE === '0 8 * * *' ? 'retry' : (process.env.INPUT_MODE || 'morning');
-          if (!['morning', 'retry'].includes(mode)) throw new Error('Invalid mode');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'date=' + date + '\nmode=' + mode + '\n');
-          NODE
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/rewards-schedule.cjs plan
 
   account_1:
     name: Account 1/6
     needs: plan
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 1
@@ -65,7 +67,7 @@ jobs:
   account_2:
     name: Account 2/6
     needs: [plan, account_1]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 2
@@ -77,7 +79,7 @@ jobs:
   account_3:
     name: Account 3/6
     needs: [plan, account_2]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 3
@@ -89,7 +91,7 @@ jobs:
   account_4:
     name: Account 4/6
     needs: [plan, account_3]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 4
@@ -101,7 +103,7 @@ jobs:
   account_5:
     name: Account 5/6
     needs: [plan, account_4]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 5
@@ -113,7 +115,7 @@ jobs:
   account_6:
     name: Account 6/6
     needs: [plan, account_5]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     uses: ./.github/workflows/rewards-account.yml
     with:
       account: 6
@@ -125,7 +127,7 @@ jobs:
   summary:
     name: Daily Telegram summary
     needs: [plan, account_1, account_2, account_3, account_4, account_5, account_6]
-    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    if: ${{ !cancelled() && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

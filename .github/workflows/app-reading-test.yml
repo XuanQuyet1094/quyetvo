@@ -22,17 +22,9 @@ jobs:
     needs: plan
     uses: ./.github/workflows/rewards-account.yml
     with:
-      account: 1
+      account: 3
       run_mode: app-read-test
       run_date: ${{ needs.plan.outputs.date }}
     secrets: inherit
 
-# Verify the retained-token reading POST on the current Vietnam date after protected build passes.
-
-# Single Android-aligned comparison after the explicit HTTP 401 rejection; never replay ambiguous submissions.
-
-# Owner requested completion of remaining daily reading points with verified-quota recovery.
-
-# Continue only the remaining private receipt budget using renewed App credentials.
-
-# Complete only the final remaining credit budget; earlier receipts already establish progress.
+# Owner-authorized account 3 reading-only experiment; private receipts limit the daily credit budget.

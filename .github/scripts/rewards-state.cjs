@@ -159,7 +159,60 @@ async function finish() {
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }
-module.exports = {retryable, eligible, stateResult, claim, finish};
+
+function reportContext(env = process.env) {
+  if (!env.REWARDS_STATE_TOKEN) throw new Error('Private reporting requires state credentials');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(env.RUN_DATE || '') ||
+      !/^\d+$/.test(env.GITHUB_RUN_ID || '') || !/^\d+$/.test(env.GITHUB_RUN_ATTEMPT || '')) {
+    throw new Error('Invalid private report context');
+  }
+  return {date: env.RUN_DATE, runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT};
+}
+function reportRoute(ctx, slot) {
+  return `/contents/reports/${ctx.date}/run-${ctx.runId}-attempt-${ctx.attempt}/account-${slot}.json`;
+}
+function safeReport(value, slot, date) {
+  if (!value || value.accountId !== slot || value.date !== date ||
+      !['completed', 'failed', 'needs_action'].includes(value.status)) {
+    throw new Error('Invalid private report');
+  }
+  const metric = (v, nonnegative = false) => Number.isSafeInteger(v) && (!nonnegative || v >= 0) ? v : null;
+  return {accountId: slot, date, status: value.status,
+    pointsEarned: metric(value.pointsEarned),
+    initialBalance: metric(value.initialBalance, true),
+    finalBalance: metric(value.finalBalance, true),
+    errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null};
+}
+async function requirePrivateReports() {
+  if ((await api('')).private !== true) throw new Error('Reports repository must be private');
+  await api(`/branches/${BRANCH}`);
+}
+async function savePrivateReport(value) {
+  const ctx = reportContext();
+  const slot = Number(process.env.ACCOUNT_SLOT);
+  if (![1,2,3,4,5,6].includes(slot)) throw new Error('Invalid report slot');
+  const report = safeReport(value, slot, ctx.date);
+  await requirePrivateReports();
+  const route = reportRoute(ctx, slot);
+  const old = await api(`${route}?ref=${BRANCH}`, {}, true);
+  await api(route, {method:'PUT', body: JSON.stringify({branch: BRANCH, sha: old?.sha,
+    message: 'Save private run report',
+    content: Buffer.from(JSON.stringify(report)).toString('base64')})});
+}
+async function readPrivateReports(jobs) {
+  const ctx = reportContext();
+  await requirePrivateReports();
+  const result = {};
+  for (const slot of [1,2,3,4,5,6]) {
+    const job = jobs[`account_${slot}`] || {};
+    const file = await api(`${reportRoute(ctx, slot)}?ref=${BRANCH}`, {}, true);
+    const report = file ? safeReport(JSON.parse(Buffer.from(file.content,'base64').toString('utf8')), slot, ctx.date) : null;
+    result[`account_${slot}`] = {...job, outputs: {result: report ? JSON.stringify(report) : ''}};
+  }
+  return result;
+}
+
+module.exports = {retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports};
 if (require.main === module) {
   const task = process.argv[2] === 'claim' ? claim :
     process.argv[2] === 'finish' ? finish :

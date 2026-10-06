@@ -46,7 +46,12 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Check remaining daily execution budget
+        id: window
+        run: node automation/.github/scripts/rewards-schedule.cjs window
+
       - name: Verify configuration before reserving an attempt
+        if: ${{ steps.window.outputs.run == 'true' }}
         env:
           ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
           ACCOUNT_PASSWORD: ${{ secrets[format('ACCOUNT_{0}_PASSWORD', inputs.account)] }}
@@ -65,6 +70,7 @@ jobs:
 
       - name: Check and reserve daily attempt in private state
         id: claim
+        if: ${{ steps.window.outputs.run == 'true' }}
         env:
           REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}

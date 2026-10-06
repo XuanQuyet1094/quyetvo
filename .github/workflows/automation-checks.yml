@@ -18,4 +18,4 @@ jobs:
         with:
           node-version: '24'
       - name: Test privacy, recovery, preflight and retention with synthetic fixtures
-        run: node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs .github/scripts/rewards-operations.test.cjs
+        run: node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs .github/scripts/rewards-operations.test.cjs .github/scripts/rewards-schedule.test.cjs

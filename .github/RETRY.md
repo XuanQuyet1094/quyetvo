@@ -1,6 +1,6 @@
 # Daily recovery workflow
 
-Schedule (Vietnam time): 07:00 morning, 15:00 technical-failure recovery. GitHub may queue jobs; both modes use the same concurrency group. Manual dispatch selects `morning` or `retry`.
+Schedule (Vietnam time): 04:17 morning, 14:37 technical-failure recovery. Scheduled morning plans may start before 10:00; retry plans before 16:00. Later queued schedules are skipped. GitHub may queue jobs; both modes use the same concurrency group. Manual dispatch selects `morning` or `retry`.
 
 ## One-time setup
 
@@ -46,3 +46,11 @@ Before merging the Secrets migration, create these repository Actions secrets in
 - `AZDIGI_SSH_PORT`: SSH port as a decimal number.
 
 Keep the existing checkout token, state token, SSH key and known-hosts secrets. The main workflow already passes repository secrets to the reusable worker using `secrets: inherit`. This migration affects future runs only; old logs and Git history retain previously published values.
+
+## Daily execution window
+
+The plan reads the original workflow run creation timestamp from GitHub instead of dating the run when a delayed job starts. A run queued across Vietnam midnight is skipped, never reassigned to the next day. Unknown schedules fail closed.
+
+Each worker checks its remaining budget before preflight and again before reserving an attempt. New account attempts require at least 90 minutes before the 22:30 Vietnam bot deadline (last start 21:00). The bot retains its 75-minute limit and is also stopped at the earlier daily deadline; DAILY_WINDOW_EXPIRED does not qualify for an earning retry. Result persistence and notification can follow the bot stop. GitHub may still show a late queued workflow entry; preventing that entry requires an external scheduler. Existing active runs keep their old workflow revision.
+
+Accounts remain sequential and the 100–180 second inter-account rest is unchanged. Six workers at their 100-minute job caps can need about ten hours per pass; changing cron does not make six full worst-case retries fit after an arbitrarily late start. Late accounts are skipped without consuming their attempts. Search pacing is unchanged. Disable any duplicate external AZDIGI schedule separately.

@@ -165,12 +165,14 @@ async function finish() {
   try { result = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, 'utf8')); }
   catch { result = {status: 'failed', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'}; }
   if (result.accountId !== undefined && Number(result.accountId) !== ctx.slot) throw new Error('Wrong account result');
-  let logPath = null;
+  let logPath = null, setupLogPath = null;
+  try { setupLogPath = await uploadPrivateLog(ctx, 'setup'); }
+  catch { console.warn('::warning::Private setup log upload failed; bot execution will not be repeated.'); }
   try { logPath = await uploadPrivateLog(ctx); }
   catch { console.error('Private bot log upload failed; private status will still be saved.'); }
   try { await uploadPrivateLog(ctx, 'setup'); }
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
-  state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
+  state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), ...(setupLogPath ? {setupLogPath} : {}), finishedAt: new Date().toISOString()};
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }

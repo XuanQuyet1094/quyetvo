@@ -115,7 +115,8 @@ async function claim() {
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
         (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
-         (state['app-test'].history || []).length >= (appReadObserved ? 8 : 2)))))) {
+         ((state['app-test'].history || []).length >= (appReadObserved ? 8 : 2) && state['app-test'].errorCode !== 'SETUP_FAILED') ||
+         (state['app-test'].history || []).length >= (appReadObserved ? 9 : 3)))))) {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.

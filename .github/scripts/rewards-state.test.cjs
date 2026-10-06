@@ -71,11 +71,11 @@ test('claim is persisted before authorization and cannot be claimed twice', asyn
   const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
   let state={schema:1,date,accountId:2,morning:{status:'failed',retryable:true}}, puts=0;
   try {
-    Object.assign(process.env,{RUN_DATE:date,ACCOUNT_SLOT:'2',RUN_MODE:'retry',REWARDS_STATE_TOKEN:'synthetic',GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(tmp,'out')});
+    Object.assign(process.env,{RUN_DATE:date,ACCOUNT_SLOT:'2',RUN_MODE:'retry',REWARDS_STATE_TOKEN:'synthetic',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(tmp,'out')});
     global.fetch=async (url,options) => {
       let body;
       if(options.method==='PUT') { state=JSON.parse(Buffer.from(JSON.parse(options.body).content,'base64')); puts++; body={}; }
-      else if(url.endsWith('/Microsoft-Rewards-Script')) body={private:true};
+      else if(url.endsWith('/example/private-state')) body={private:true};
       else if(url.includes('/branches/')) body={name:'rewards-state'};
       else body={sha:'old',content:Buffer.from(JSON.stringify(state)).toString('base64')};
       return {ok:true,status:200,json:async()=>body};

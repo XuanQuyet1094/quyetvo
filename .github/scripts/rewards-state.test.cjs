@@ -90,3 +90,46 @@ test('claim is persisted before authorization and cannot be claimed twice', asyn
     assert.equal(fs.readFileSync(process.env.GITHUB_OUTPUT,'utf8'),'run=false\n');
   } finally { global.fetch=oldFetch; for(const k of Object.keys(process.env)) if(!(k in prev))delete process.env[k]; Object.assign(process.env,prev);fs.rmSync(tmp,{recursive:true,force:true}); }
 });
+
+test('private reports stay scoped to this run and never contain identity', async () => {
+  const prev = {...process.env}, oldFetch = global.fetch;
+  const {savePrivateReport, readPrivateReports} = require('./rewards-state.cjs');
+  const files = new Map(), routes = [];
+  try {
+    Object.assign(process.env, {REWARDS_PRIVATE_REPO:'example/private-state', REWARDS_STATE_TOKEN:'synthetic',
+      RUN_DATE:'2026-10-06', GITHUB_RUN_ID:'123', GITHUB_RUN_ATTEMPT:'2', ACCOUNT_SLOT:'1'});
+    global.fetch = async (url, options = {}) => {
+      routes.push(url);
+      if (url.endsWith('/example/private-state')) return {ok:true,status:200,json:async()=>({private:true})};
+      if (url.includes('/branches/')) return {ok:true,status:200,json:async()=>({name:'rewards-state'})};
+      const route = url.split('?')[0];
+      if (options.method === 'PUT') {
+        const payload = JSON.parse(options.body);
+        files.set(route,{sha:'test',content:payload.content});
+        return {ok:true,status:200,json:async()=>({})};
+      }
+      return {ok:files.has(route),status:files.has(route)?200:404,json:async()=>files.get(route)};
+    };
+    await savePrivateReport({accountId:1,date:'2026-10-06',status:'completed',pointsEarned:0,
+      initialBalance:100,finalBalance:100,email:'private@example.test',token:'do-not-store'});
+    const stored = JSON.parse(Buffer.from([...files.values()][0].content,'base64').toString());
+    assert.equal(stored.pointsEarned,0);
+    assert.equal(stored.email,undefined);
+    assert.equal(stored.token,undefined);
+    const reports = await readPrivateReports({account_1:{result:'success'},account_2:{result:'success'}});
+    assert.equal(JSON.parse(reports.account_1.outputs.result).finalBalance,100);
+    assert.equal(reports.account_2.outputs.result,'');
+    assert.ok(routes.filter(x=>x.includes('/reports/')).every(x=>x.includes('/run-123-attempt-2/')));
+    process.env.GITHUB_RUN_ATTEMPT='3';
+    assert.equal((await readPrivateReports({})).account_1.outputs.result,'');
+    await assert.rejects(savePrivateReport({...stored,accountId:2}), /Invalid private report/);
+    global.fetch=async()=>({ok:true,status:200,json:async()=>({private:false})});
+    await assert.rejects(savePrivateReport(stored),/must be private/);
+    delete process.env.REWARDS_STATE_TOKEN;
+    await assert.rejects(readPrivateReports({}),/requires state credentials/);
+  } finally {
+    global.fetch=oldFetch;
+    for(const k of Object.keys(process.env)) if(!(k in prev)) delete process.env[k];
+    Object.assign(process.env,prev);
+  }
+});

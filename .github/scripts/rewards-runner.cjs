@@ -120,18 +120,20 @@ function configure(diagnosticOnly = false) {
       for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
     }
   }
-  else if (process.env.RUN_MODE === 'test') {
+  else if (['test', 'app-test'].includes(process.env.RUN_MODE)) {
     cfg.ensureStreakProtection = false;
     cfg.autoClaimPunchcardRewards = false;
     if (cfg.workers && typeof cfg.workers === 'object') {
       for (const key of Object.keys(cfg.workers)) cfg.workers[key] = false;
-      cfg.workers.doDailySet = true;
+      cfg.workers.doDailySet = process.env.RUN_MODE === 'test';
+      cfg.workers.doDailyCheckIn = process.env.RUN_MODE === 'app-test';
     }
     if (cfg.activities && typeof cfg.activities === 'object') {
       for (const key of Object.keys(cfg.activities)) cfg.activities[key] = false;
-      cfg.activities.urlReward = true;
+      cfg.activities.urlReward = process.env.RUN_MODE === 'test';
     }
   }
+  if (process.env.RUN_MODE === 'app-test' && cfg.experimental) cfg.experimental.edgeBrowsing = false;
   if (cfg.consoleLogFilter) cfg.consoleLogFilter.enabled = false;
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;

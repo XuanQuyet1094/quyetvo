@@ -15,10 +15,6 @@ on:
       debug_daily_set:
         type: boolean
         default: false
-    outputs:
-      result:
-        description: Numeric result and fixed status labels; no account identity
-        value: ${{ jobs.account.outputs.result }}
 
 permissions:
   contents: read
@@ -27,8 +23,6 @@ jobs:
   account:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
-    outputs:
-      result: ${{ steps.report.outputs.result }}
     defaults:
       run:
         shell: bash
@@ -141,6 +135,8 @@ jobs:
         if: ${{ always() && steps.claim.outputs.run == 'true' }}
         env:
           ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BOT_OUTCOME: ${{ steps.bot.outcome }}

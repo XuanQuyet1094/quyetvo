@@ -106,8 +106,8 @@ async function claim() {
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
   if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
-        (state['app-auth-probe'].status === 'running' || state['app-auth-probe'].authVerified === true ||
-         (state['app-auth-probe'].history || []).length >= 2)))) ||
+        (state['app-auth-probe'].status === 'running' || state['app-test']?.checkInVerified === true ||
+         (state['app-auth-probe'].history || []).length >= 3)))) ||
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||

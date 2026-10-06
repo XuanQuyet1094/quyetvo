@@ -65,7 +65,8 @@ test('unknown diagnostic values are omitted without widening retry eligibility',
   assert.equal(technical.retryable,true);
   assert.deepEqual(technical.diagnostic.errors,['ERR_PROXY_CONNECTION_FAILED']);
 });
-test('claim is persisted before authorization and cannot be claimed twice', async () => {
+test('claim is persisted before authorization and cannot be claimed twice', async (t) => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-10-06T08:00:00Z'));
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'state-test-'));
   const prev={...process.env}, oldFetch=global.fetch;
   const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);

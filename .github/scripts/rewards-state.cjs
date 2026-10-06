@@ -12,7 +12,7 @@ const BRANCH = 'rewards-state';
 const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 const transient = new Set(['NETWORK_TIMEOUT', 'ACCOUNT_TIMEOUT', 'HTTP_408', 'HTTP_425', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504']);
 const network = new Set(['ERR_EMPTY_RESPONSE', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_SOCKS_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED', 'ERR_NAME_NOT_RESOLVED', 'ERR_CONNECTION_RESET']);
-const blocked = new Set(['AUTH_REQUIRED', 'ACCOUNT_LOCKED', 'BOT_WARNING', 'PASSWORD_NOT_CONFIGURED', 'MICROSOFT_LOGIN_ERROR', 'MICROSOFT_LOGIN_UNKNOWN_ERROR',
+const blocked = new Set(['DAILY_WINDOW_EXPIRED', 'AUTH_REQUIRED', 'ACCOUNT_LOCKED', 'BOT_WARNING', 'PASSWORD_NOT_CONFIGURED', 'MICROSOFT_LOGIN_ERROR', 'MICROSOFT_LOGIN_UNKNOWN_ERROR',
   'TOTP_METHOD_SELECTION_FAILED', 'TOTP_SECRET_INVALID', 'TOTP_SECRET_MISSING',
   'TOTP_REJECTED', 'TOTP_INPUT_MISSING', 'TOTP_SUBMIT_FAILED', 'TOTP_NOT_ADVANCED']);
 const diagnosticErrors = new Set([...network, ...blocked, 'TRANSIENT_LOGIN_ALERT',
@@ -87,6 +87,9 @@ function output(key, value) { fs.appendFileSync(process.env.GITHUB_OUTPUT, `${ke
 async function claim() {
   const ctx = context();
   if (ctx.date !== today()) { output('run', 'false'); console.log('Skipped: run date is no longer today in Vietnam.'); return; }
+  if (!require('./rewards-schedule.cjs').canStart(ctx.date)) {
+    output('run', 'false'); console.log('Skipped: insufficient daily execution budget; no attempt reserved.'); return;
+  }
   if (!process.env.REWARDS_STATE_TOKEN) {
     if (ctx.mode === 'test') {
       console.log('::warning::REWARDS_STATE_TOKEN missing: one-account test disabled to prevent duplicate runs.');

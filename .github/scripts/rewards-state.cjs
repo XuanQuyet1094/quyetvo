@@ -122,10 +122,32 @@ async function claim() {
          (state['app-test'].history || []).length >= (appReadObserved ? 9 : 3)))))) {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
+  let readingPointsBudget;
+  if (ctx.mode === 'app-read-test') {
+    let credited = 0;
+    const entries = [...(state[ctx.mode]?.history || []), ...(state[ctx.mode] ? [state[ctx.mode]] : [])];
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry.runId || '') || !/^\d+$/.test(entry.runAttempt || '')) continue;
+      const file = await api('/contents/reports/' + ctx.date + '/run-' + entry.runId + '-attempt-' + entry.runAttempt + '/account-' + ctx.slot + '.json?ref=' + BRANCH, {}, true);
+      if (!file) throw new Error('Reading receipts missing; cannot establish remaining credit budget');
+      const report = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+      if (report.date !== ctx.date || report.accountId !== ctx.slot || !Number.isSafeInteger(report.pointsEarned) ||
+          report.pointsEarned < 0 || report.pointsEarned > 30 || !Number.isSafeInteger(report.initialBalance) ||
+          !Number.isSafeInteger(report.finalBalance) || report.finalBalance - report.initialBalance !== report.pointsEarned)
+        throw new Error('Reading receipts unverified');
+      credited += report.pointsEarned;
+    }
+    readingPointsBudget = Math.max(0, 30 - credited);
+    if (!readingPointsBudget) { output('run', 'false'); console.log('Skipped: reading credit target already satisfied.'); return; }
+    const folder = path.join(process.env.RUNNER_TEMP || path.dirname(process.env.GITHUB_OUTPUT), 'rewards-private');
+    fs.mkdirSync(folder, {recursive: true, mode: 0o700});
+    fs.writeFileSync(path.join(folder, 'reading-budget.json'), JSON.stringify({date:ctx.date, accountId:ctx.slot, points:readingPointsBudget}), {mode:0o600});
+  }
+
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
   const history = ['app-test', 'app-auth-probe', 'app-read-test'].includes(ctx.mode) && state[ctx.mode]
     ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
-  state[ctx.mode] = {...(history.length ? {history} : {}), status: 'running', retryable: false, errorCode: null,
+  state[ctx.mode] = {...(history.length ? {history} : {}), ...(readingPointsBudget ? {readingPointsBudget} : {}), status: 'running', retryable: false, errorCode: null,
     runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     startedAt: new Date().toISOString()};
   await put(ctx, state, sha); // SHA conflict fails closed instead of launching a duplicate.

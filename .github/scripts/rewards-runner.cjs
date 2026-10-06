@@ -163,6 +163,7 @@ async function runAccount(options = {}) {
     result.durationSeconds = Math.round((Date.now() - started) / 1000);
     result.diagnostic = diagnostic;
     if (source.RUN_MODE === 'app-test') result.appCheckInVerified = appCheckInVerified;
+    if (source.RUN_MODE === 'app-auth-probe') result.appAuthVerified = appAuthVerified;
     result.exitCode = number(code);
     result.signal = ['SIGTERM', 'SIGKILL', 'SIGINT'].includes(signal) ? signal : null;
     save(source.REPORT_PATH, result);

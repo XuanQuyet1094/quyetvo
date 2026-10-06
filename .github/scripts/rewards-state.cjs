@@ -65,7 +65,7 @@ function context() {
   const date = process.env.RUN_DATE;
   const slot = Number(process.env.ACCOUNT_SLOT);
   const mode = process.env.RUN_MODE;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic','test'].includes(mode)) throw new Error('Invalid state context');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic','test','app-test'].includes(mode)) throw new Error('Invalid state context');
   return {date, slot, mode, file: `/contents/state/${date}/account-${slot}.json`};
 }
 async function get(ctx) {
@@ -107,7 +107,8 @@ async function claim() {
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
   if ((ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
-      (ctx.mode === 'test' && (ctx.slot !== 1 || state.test))) {
+      (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
+      (ctx.mode === 'app-test' && (ctx.slot !== 1 || state['app-test']))) {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.

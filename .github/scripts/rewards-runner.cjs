@@ -83,6 +83,12 @@ function cleanResult(r, id) {
 }
 function childEnvironment(source, id) {
   const env = {...source};
+  if (source.RUN_MODE === 'app-read-test') {
+    const budget = read(path.join(source.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
+    if (!budget || budget.date !== source.RUN_DATE || budget.accountId !== id || !Number.isSafeInteger(budget.points) || budget.points < 1 || budget.points > 30)
+      throw new Error('Invalid private reading budget');
+    env.REWARDS_READING_POINTS_BUDGET = String(budget.points);
+  }
   for (const key of Object.keys(env)) {
     if (/^ACCOUNT_/.test(key) || /TOKEN|SECRET|PASSWORD|SSH_KEY|KNOWN_HOSTS/.test(key)) delete env[key];
   }

@@ -32,3 +32,5 @@ jobs:
 # Single Android-aligned comparison after the explicit HTTP 401 rejection; never replay ambiguous submissions.
 
 # Owner requested completion of remaining daily reading points with verified-quota recovery.
+
+# Continue only the remaining private receipt budget using renewed App credentials.

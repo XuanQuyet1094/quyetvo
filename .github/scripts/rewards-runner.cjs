@@ -7,6 +7,7 @@ const readline = require('node:readline');
 const {randomInt} = require('node:crypto');
 const {setTimeout: wait} = require('node:timers/promises');
 const createDiagnostics = require('./rewards-diagnostics.cjs');
+const schedule = require('./rewards-schedule.cjs');
 
 const slots = [1, 2, 3, 4, 5, 6];
 const number = v => typeof v === 'number' && Number.isSafeInteger(v) ? v : null;
@@ -18,7 +19,7 @@ const dateVN = () => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Ho_Chi_Mi
 const errors = new Set(['ACCOUNT_LOCKED', 'BOT_WARNING', 'AUTH_REQUIRED', 'NETWORK_TIMEOUT',
   'DASHBOARD_UNAVAILABLE', 'FLOW_FAILED', 'BALANCE_UNVERIFIED', 'STALE_RUN_DATE',
   'INVALID_ACCOUNT_SELECTION', 'MISSING_ACCOUNT_EMAIL', 'PROCESS_FAILED', 'NO_FINAL_RESULT',
-  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED']);
+  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED']);
 function errorLabel(value) {
   return errors.has(value) || /^HTTP_[45]\d\d$/.test(String(value)) ? value : value ? 'FLOW_FAILED' : null;
 }
@@ -147,7 +148,7 @@ async function runAccount(options = {}) {
   const started = Date.now();
   let last = null, stopped = null;
   function persist(code, signal) {
-    const result = last || {accountId: id, date: dateVN(), status: 'failed', initialBalance: null,
+    const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
     if (stopped || code !== 0 || signal || !result.finished) {
       result.status = 'failed';
@@ -164,6 +165,15 @@ async function runAccount(options = {}) {
     stopped = 'MISSING_ACCOUNT_EMAIL';
     persist(1, null);
     return 1;
+  }
+  let remaining = Infinity;
+  if (source.RUN_DATE) {
+    remaining = schedule.deadline(source.RUN_DATE) - started;
+    if (source.RUN_DATE !== schedule.dateVN(started) || remaining <= 0) {
+      stopped = 'DAILY_WINDOW_EXPIRED';
+      persist(1, null);
+      return 1;
+    }
   }
   const child = spawn(options.command || process.execPath, options.args || ['dist/index.js'], {
     cwd: source.BOT_DIR, env: childEnvironment(source, id), detached: true,
@@ -182,7 +192,9 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const timeout = setTimeout(() => stop('ACCOUNT_TIMEOUT'), options.timeoutMs ?? 75 * 60000);
+  const accountLimit = options.timeoutMs ?? 75 * 60000;
+  const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
+    Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log(`Account ${id}/6: running; raw logs remain private.`), 60000);
   const privateLogPath = captureLogPath(source, id);
   const privateLog = fs.createWriteStream(privateLogPath, {flags: 'w', mode: 0o600});
@@ -279,7 +291,7 @@ async function telegram(text, env = process.env, fetchFn = fetch) {
 }
 async function prepareReport() {
   const id = accountSlot();
-  const r = read(process.env.REPORT_PATH) || {accountId: id, date: dateVN(), status: 'failed',
+  const r = read(process.env.REPORT_PATH) || {accountId: id, date: process.env.RUN_DATE || dateVN(), status: 'failed',
     initialBalance: null, finalBalance: null, pointsEarned: null, durationSeconds: null,
     searchQuota: 'unknown', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'};
   // Balances remain in the private repository; never emit them as Actions outputs.

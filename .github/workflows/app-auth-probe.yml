@@ -43,3 +43,5 @@ jobs:
 # Verify Android dashboard fallback independently of iOS rejection.
 
 # Compare fresh Live token exchanges after the initial read-only matrix.
+
+# Compare renewal and matching App identities with fresh authorization.

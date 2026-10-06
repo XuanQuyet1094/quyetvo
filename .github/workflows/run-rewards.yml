@@ -137,6 +137,8 @@ jobs:
           node-version: '24'
       - name: Send totals privately
         env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RUN_MODE: ${{ needs.plan.outputs.mode }}

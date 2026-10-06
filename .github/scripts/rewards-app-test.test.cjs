@@ -46,3 +46,17 @@ test('late reading test remains in the original Vietnam day without reopening mo
  assert.equal(s.canStart('2026-10-06',now,'morning'),false);
  assert.equal(s.canStart('2026-10-06',Date.parse('2026-10-07T00:00:00+07:00'),'app-read-test'),false);
 });
+
+test('morning keeps other earning enabled but skips reading when private receipts meet the target',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reading-complete-'));
+ try{
+ fs.mkdirSync(path.join(dir,'rewards-private'));
+ fs.writeFileSync(path.join(dir,'rewards-private/reading-budget.json'),JSON.stringify({date:'2026-10-07',accountId:1,points:0}));
+ fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doDailySet:true,doDailyCheckIn:true,doReadToEarn:true,doMobileSearch:true},activities:{urlReward:true},experimental:{edgeBrowsing:true}}));
+ const result=spawnSync(process.execPath,[path.join(__dirname,'rewards-runner.cjs'),'configure'],{env:{...process.env,RUN_MODE:'morning',RUN_DATE:'2026-10-07',ACCOUNT_SLOT:'1',BOT_DIR:dir,RUNNER_TEMP:dir},encoding:'utf8'});
+ assert.equal(result.status,0);
+ const config=JSON.parse(fs.readFileSync(path.join(dir,'config.json')));
+ assert.equal(config.workers.doReadToEarn,false);
+ assert.equal(config.workers.doDailySet,true);assert.equal(config.workers.doMobileSearch,true);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

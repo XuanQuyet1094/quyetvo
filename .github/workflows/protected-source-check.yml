@@ -60,3 +60,5 @@ jobs:
 # Verify isolated reading fallback and balance evidence after the dashboard fix.
 
 # Verify aligned type-101 request fields before a bounded live protocol comparison.
+
+# Verify quota reconciliation and bounded reading continuation requested by the owner.

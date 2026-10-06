@@ -42,6 +42,6 @@ jobs:
 
 # Verify Android dashboard fallback independently of iOS rejection.
 
-# Verify the App transport fix after the successful read-only comparison.
+# Bounded read retry confirmation: 2026-10-06 UTC
 
 # Check-in planning uses the already accepted App snapshot.

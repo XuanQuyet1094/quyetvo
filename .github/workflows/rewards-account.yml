@@ -46,6 +46,23 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Verify configuration before reserving an attempt
+        env:
+          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
+          ACCOUNT_PASSWORD: ${{ secrets[format('ACCOUNT_{0}_PASSWORD', inputs.account)] }}
+          ACCOUNT_TOTP_SECRET: ${{ secrets[format('ACCOUNT_{0}_TOTP_SECRET', inputs.account)] }}
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AZDIGI_SSH_HOST: ${{ secrets.AZDIGI_SSH_HOST }}
+          AZDIGI_SSH_USER: ${{ secrets.AZDIGI_SSH_USER }}
+          AZDIGI_SSH_PORT: ${{ secrets.AZDIGI_SSH_PORT }}
+          AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
+          AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
+        run: node automation/.github/scripts/rewards-operations.cjs preflight
+
       - name: Check and reserve daily attempt in private state
         id: claim
         env:
@@ -66,12 +83,7 @@ jobs:
       - name: Install browser and build
         if: ${{ steps.claim.outputs.run == 'true' }}
         timeout-minutes: 15
-        working-directory: bot
-        run: |
-          npm ci --include=dev
-          npx --no-install patchright install --with-deps chromium
-          npm run build
-          test -f dist/index.js
+        run: node automation/.github/scripts/rewards-operations.cjs build
 
       - name: Configure single-account run
         if: ${{ steps.claim.outputs.run == 'true' }}
@@ -130,8 +142,8 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: node automation/.github/scripts/rewards-state.cjs finish
 
-      - name: Send one account report to Telegram
-        id: report
+      - name: Save account report and queue private notification
+        id: prepare_report
         if: ${{ always() && steps.claim.outputs.run == 'true' }}
         env:
           ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
@@ -141,6 +153,15 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BOT_OUTCOME: ${{ steps.bot.outcome }}
           JOB_STATUS: ${{ job.status }}
+        run: node automation/.github/scripts/rewards-runner.cjs prepare-report
+
+      - name: Deliver saved account notification
+        if: ${{ always() && steps.prepare_report.outcome == 'success' }}
+        env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node automation/.github/scripts/rewards-runner.cjs report
 
       - name: Cleanup tunnel and sensitive files

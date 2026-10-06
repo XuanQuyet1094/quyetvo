@@ -1,0 +1,21 @@
+name: Automation checks
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/scripts/**', '.github/workflows/**']
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test privacy, recovery, preflight and retention with synthetic fixtures
+        run: node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs .github/scripts/rewards-operations.test.cjs

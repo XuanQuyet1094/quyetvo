@@ -1,28 +1,28 @@
-name: rewards-smoke-test
+name: Recover saved Telegram notifications
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/rewards-smoke.yml']
+  schedule:
+    - cron: '30 1,5,9,13 * * *'
 permissions:
   contents: read
+concurrency:
+  group: rewards-notification-recovery
+  cancel-in-progress: false
 jobs:
-  test:
+  recover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-      - name: Verify retry rules and notification formatting
-        run: node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs .github/scripts/rewards-operations.test.cjs
-      - name: Test private state and send Telegram test
+          node-version: '24'
+      - name: Retry saved notifications only; never run bot
         env:
           REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node .github/scripts/rewards-smoke.cjs
+        run: node .github/scripts/rewards-runner.cjs resend

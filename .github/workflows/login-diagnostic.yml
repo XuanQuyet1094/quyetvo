@@ -54,13 +54,7 @@ jobs:
 
       - name: Install browser and build
         timeout-minutes: 15
-        working-directory: bot
-        run: |
-          npm ci --include=dev
-          npx --no-install patchright install --with-deps chromium
-          npm run build
-          npm run test:auth
-          test -f dist/index.js
+        run: node automation/.github/scripts/rewards-operations.cjs build
 
       - name: Configure login-only mode
         run: |
@@ -119,7 +113,7 @@ jobs:
         run: |
           : "${REWARDS_STATE_TOKEN:?Missing REWARDS_STATE_TOKEN}"
           LOG="$RUNNER_TEMP/rewards-private/account-${ACCOUNT_SLOT}.log"
-          if [[ -s "$LOG" ]]; then
+          if [[ -s "$LOG" || -s "$RUNNER_TEMP/rewards-private/setup-account-${ACCOUNT_SLOT}.log" ]]; then
             node automation/.github/scripts/rewards-state.cjs upload-log
           else
             echo "No bot log was produced; check which setup step failed."

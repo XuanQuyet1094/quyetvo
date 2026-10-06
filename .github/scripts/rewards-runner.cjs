@@ -269,10 +269,15 @@ async function telegram(text, env = process.env, fetchFn = fetch) {
     signal: AbortSignal.timeout(20000)
   });
   const body = await response.json();
-  if (!response.ok || body.ok !== true) throw new Error('Telegram rejected notification');
+  if (!response.ok || body.ok !== true) {
+    const error = new Error('Telegram rejected notification');
+    // A valid Telegram error response explicitly confirms that no message was accepted.
+    error.definitelyNotDelivered = body.ok === false;
+    throw error;
+  }
   console.log('Telegram report delivered.');
 }
-async function report() {
+async function prepareReport() {
   const id = accountSlot();
   const r = read(process.env.REPORT_PATH) || {accountId: id, date: dateVN(), status: 'failed',
     initialBalance: null, finalBalance: null, pointsEarned: null, durationSeconds: null,
@@ -281,7 +286,9 @@ async function report() {
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
     initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode};
   await require('./rewards-state.cjs').savePrivateReport(output);
-  await telegram(accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
+  await require('./rewards-operations.cjs').enqueue(`account-${id}`,
+    accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
+  console.log('Account report saved privately; notification queued.');
 }
 function summaryMessage(jobs, env = process.env) {
   const rows = slots.map(id => {
@@ -313,10 +320,14 @@ async function main() {
     case 'configure': configure(); break;
     case 'configure-login-diagnostic': configure(true); break;
     case 'run': process.exitCode = await runAccount(); break;
-    case 'report': await report(); break;
+    case 'prepare-report': await prepareReport(); break;
+    case 'report': await require('./rewards-operations.cjs').deliver(`account-${accountSlot()}`, telegram); break;
+    case 'resend': await require('./rewards-operations.cjs').resendPending(telegram); break;
     case 'summary': {
       const jobs = await require('./rewards-state.cjs').readPrivateReports(JSON.parse(process.env.JOB_RESULTS));
-      await telegram(summaryMessage(jobs));
+      const operations = require('./rewards-operations.cjs');
+      await operations.enqueue('summary', summaryMessage(jobs));
+      await operations.deliver('summary', telegram);
       break;
     }
     case 'rest': {

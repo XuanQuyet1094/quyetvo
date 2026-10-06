@@ -1,0 +1,26 @@
+name: Private log retention
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 23 * * *' # 06:30 Vietnam
+permissions:
+  contents: read
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Keep three Vietnam calendar days of private logs
+        env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+        run: node .github/scripts/rewards-operations.cjs cleanup

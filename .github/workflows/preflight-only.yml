@@ -1,0 +1,40 @@
+name: Configuration check only
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        type: choice
+        options: ['1', '2', '3', '4', '5', '6']
+        default: '1'
+        required: true
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Set Vietnam date
+        run: node -e "require('fs').appendFileSync(process.env.GITHUB_ENV,'RUN_DATE='+new Date(Date.now()+7*3600000).toISOString().slice(0,10)+'\n')"
+      - name: Verify access without running accounts or sending messages
+        env:
+          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
+          ACCOUNT_PASSWORD: ${{ secrets[format('ACCOUNT_{0}_PASSWORD', inputs.account)] }}
+          ACCOUNT_TOTP_SECRET: ${{ secrets[format('ACCOUNT_{0}_TOTP_SECRET', inputs.account)] }}
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AZDIGI_SSH_HOST: ${{ secrets.AZDIGI_SSH_HOST }}
+          AZDIGI_SSH_USER: ${{ secrets.AZDIGI_SSH_USER }}
+          AZDIGI_SSH_PORT: ${{ secrets.AZDIGI_SSH_PORT }}
+          AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
+          AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
+        run: node .github/scripts/rewards-operations.cjs preflight

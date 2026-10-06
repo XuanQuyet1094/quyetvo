@@ -121,9 +121,9 @@ function privateLogLocation(ctx) {
   const folder = ctx.mode === 'diagnostic' ? 'diagnostics' : 'logs';
   return `${folder}/${ctx.date}/account-${ctx.slot}-run-${runId}-attempt-${attempt}.log`;
 }
-async function uploadPrivateLog(ctx) {
+async function uploadPrivateLog(ctx, kind = 'bot') {
   if (!process.env.REWARDS_STATE_TOKEN || !process.env.RUNNER_TEMP) return null;
-  const localPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', `account-${ctx.slot}.log`);
+  const localPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', `${kind === 'setup' ? 'setup-' : ''}account-${ctx.slot}.log`);
   let content;
   try { content = fs.readFileSync(localPath, 'utf8'); } catch { return null; }
   // Keep GitHub Contents API payload well below its size limit.
@@ -132,7 +132,7 @@ async function uploadPrivateLog(ctx) {
     content = Buffer.from(content).subarray(-maxBytes).toString('utf8');
     content = '[Earlier log lines omitted to fit the private storage limit.]\n' + content;
   }
-  const location = privateLogLocation(ctx);
+  const location = kind === 'setup' ? privateLogLocation(ctx).replace(/^(logs|diagnostics)\//, 'setup-logs/') : privateLogLocation(ctx);
   const route = `/contents/${location.split('/').map(encodeURIComponent).join('/')}?ref=${BRANCH}`;
   const existing = await api(route, {}, true);
   const body = {branch: BRANCH, message: `Save redacted ${ctx.date} account ${ctx.slot} ${ctx.mode} log`,
@@ -155,6 +155,8 @@ async function finish() {
   let logPath = null;
   try { logPath = await uploadPrivateLog(ctx); }
   catch { console.error('Private bot log upload failed; private status will still be saved.'); }
+  try { await uploadPrivateLog(ctx, 'setup'); }
+  catch { console.error('Private setup log upload failed; status will still be saved.'); }
   state[ctx.mode] = {...entry, ...stateResult(result), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
@@ -212,7 +214,8 @@ async function readPrivateReports(jobs) {
   return result;
 }
 
-module.exports = {retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports};
+module.exports = {retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
+  api, requirePrivateReports, reportContext};
 if (require.main === module) {
   const task = process.argv[2] === 'claim' ? claim :
     process.argv[2] === 'finish' ? finish :
@@ -220,8 +223,9 @@ if (require.main === module) {
       const ctx = context();
       if (ctx.mode !== 'diagnostic') throw new Error('upload-log is only for diagnostic runs');
       const location = await uploadPrivateLog(ctx);
-      if (!location) throw new Error('Private diagnostic log was not available');
-      console.log('Private diagnostic log saved: ' + location);
+      const setup = await uploadPrivateLog(ctx, 'setup');
+      if (!location && !setup) throw new Error('Private diagnostic log was not available');
+      console.log('Private diagnostic/setup log saved.');
     } : null;
   if (!task) process.exitCode = 1;
   else task().catch(() => {

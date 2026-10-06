@@ -12,3 +12,17 @@ test('App test enables only daily check-in and disables Edge and web earning',()
   assert.equal(config.experimental.edgeBrowsing,false);
  } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
+test('authentication probe disables every earning activity',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'app-probe-config-'));
+ try{
+  fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doDailyCheckIn:true,doDesktopSearch:true,doAppPromotions:true},activities:{urlReward:true,searchOnBing:true},experimental:{edgeBrowsing:true},ensureStreakProtection:true,autoClaimPunchcardRewards:true}));
+  const result=spawnSync(process.execPath,[path.join(__dirname,'rewards-runner.cjs'),'configure'],{env:{...process.env,RUN_MODE:'app-auth-probe',ACCOUNT_SLOT:'1',BOT_DIR:dir,RUNNER_TEMP:dir},encoding:'utf8'});
+  assert.equal(result.status,0);
+  const config=JSON.parse(fs.readFileSync(path.join(dir,'config.json')));
+  assert.ok(Object.values(config.workers).every(v=>v===false));
+  assert.ok(Object.values(config.activities).every(v=>v===false));
+  assert.equal(config.experimental.edgeBrowsing,false);
+  assert.equal(config.ensureStreakProtection,false);
+  assert.equal(config.autoClaimPunchcardRewards,false);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

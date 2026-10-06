@@ -65,7 +65,7 @@ function context() {
   const date = process.env.RUN_DATE;
   const slot = Number(process.env.ACCOUNT_SLOT);
   const mode = process.env.RUN_MODE;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic','test','app-test','app-auth-probe'].includes(mode)) throw new Error('Invalid state context');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic','test','app-test','app-auth-probe','app-read-test'].includes(mode)) throw new Error('Invalid state context');
   return {date, slot, mode, file: `/contents/state/${date}/account-${slot}.json`};
 }
 async function get(ctx) {
@@ -87,7 +87,7 @@ function output(key, value) { fs.appendFileSync(process.env.GITHUB_OUTPUT, `${ke
 async function claim() {
   const ctx = context();
   if (ctx.date !== today()) { output('run', 'false'); console.log('Skipped: run date is no longer today in Vietnam.'); return; }
-  if (!require('./rewards-schedule.cjs').canStart(ctx.date)) {
+  if (!require('./rewards-schedule.cjs').canStart(ctx.date, Date.now(), ctx.mode)) {
     output('run', 'false'); console.log('Skipped: insufficient daily execution budget; no attempt reserved.'); return;
   }
   if (!process.env.REWARDS_STATE_TOKEN) {
@@ -113,6 +113,7 @@ async function claim() {
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
+      (ctx.mode === 'app-read-test' && (ctx.slot !== 1 || state['app-read-test'])) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
         (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
          ((state['app-test'].history || []).length >= (appReadObserved ? 8 : 2) && state['app-test'].errorCode !== 'SETUP_FAILED') ||

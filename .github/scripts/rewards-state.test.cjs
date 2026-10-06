@@ -115,10 +115,10 @@ test('post-fix check-in allowance requires verified authentication and remains b
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
 
-test('one stability probe remains available after a failed check-in, with a fixed daily cap', async (t) => {
+test('one controlled transport probe remains available after a failed check-in, with a fixed daily cap', async (t) => {
  t.mock.method(Date,'now',()=>Date.parse('2026-10-06T09:00:00Z'));
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'probe-state-')),previous={...process.env},oldFetch=global.fetch;
- let state={schema:1,date:'2026-10-06',accountId:1,'app-test':{status:'failed',checkInVerified:false},'app-auth-probe':{status:'completed',authVerified:true,history:[{},{}]}},puts=0;
+ let state={schema:1,date:'2026-10-06',accountId:1,'app-test':{status:'failed',checkInVerified:false},'app-auth-probe':{status:'completed',authVerified:true,history:[{},{},{}]}},puts=0;
  try{
   Object.assign(process.env,{RUN_DATE:state.date,ACCOUNT_SLOT:'1',RUN_MODE:'app-auth-probe',REWARDS_STATE_TOKEN:'fixture',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'2',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(dir,'out')});
   global.fetch=async(url,options={})=>{
@@ -129,7 +129,7 @@ test('one stability probe remains available after a failed check-in, with a fixe
    else body={sha:'fixture',content:Buffer.from(JSON.stringify(state)).toString('base64')};
    return {ok:true,status:200,json:async()=>body};
   };
-  await claim();assert.equal(puts,1);assert.equal(state['app-auth-probe'].history.length,3);
+  await claim();assert.equal(puts,1);assert.equal(state['app-auth-probe'].history.length,4);
   state['app-auth-probe'].status='failed';await claim();assert.equal(puts,1);
   state['app-auth-probe'].history=[];state['app-test'].checkInVerified=true;await claim();assert.equal(puts,1);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}

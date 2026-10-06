@@ -129,7 +129,7 @@ jobs:
               --proxy socks5h://127.0.0.1:1080 "$url" -o /dev/null
           done
 
-      - name: Run selected account (maximum 75 minutes)
+      - name: Run selected activities within the configured time limit
         if: ${{ steps.claim.outputs.run == 'true' }}
         id: bot
         continue-on-error: true

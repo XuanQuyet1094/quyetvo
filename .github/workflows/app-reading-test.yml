@@ -26,3 +26,5 @@ jobs:
       run_mode: app-read-test
       run_date: ${{ needs.plan.outputs.date }}
     secrets: inherit
+
+# Verify the retained-token reading POST on the current Vietnam date after protected build passes.

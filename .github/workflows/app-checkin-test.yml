@@ -38,4 +38,4 @@ jobs:
       run_date: ${{ needs.plan.outputs.date }}
     secrets: inherit
 
-# Verification revision: 2026-10-06 minimal Android check-in protocol comparison
+# Verification revision: 2026-10-06 minimal Android protocol comparison after setup fixture correction

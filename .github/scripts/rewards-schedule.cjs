@@ -3,12 +3,12 @@ const fs = require('node:fs');
 const MORNING = '17 19 * * *'; // 02:17 Vietnam
 const RETRY = '37 5 * * *'; // 12:37 Vietnam
 const dateVN = ms => new Date(ms + 7 * 3600000).toISOString().slice(0, 10);
-function deadline(date) {
+function deadline(date, mode) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
-  return Date.parse(date + 'T22:30:00+07:00');
+  return Date.parse(date + (mode === 'app-read-test' ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
 }
-function canStart(date, now = Date.now()) {
-  return date === dateVN(now) && deadline(date) - now >= 90 * 60000;
+function canStart(date, now = Date.now(), mode) {
+  return date === dateVN(now) && deadline(date, mode) - now >= (mode === 'app-read-test' ? 5 : 90) * 60000;
 }
 function planRun(env, createdAt, now = Date.now()) {
   const created = Date.parse(createdAt);
@@ -40,7 +40,7 @@ module.exports = {MORNING, RETRY, dateVN, deadline, canStart, planRun, plan};
 if (require.main === module) {
   if (process.argv[2] === 'plan') plan().catch(() => {console.error('Schedule validation failed.'); process.exitCode = 1;});
   else if (process.argv[2] === 'window') {
-    const run = canStart(process.env.RUN_DATE);
+    const run = canStart(process.env.RUN_DATE, Date.now(), process.env.RUN_MODE);
     fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run=' + run + '\n');
     console.log(run ? 'Account can start within the daily budget.' : 'Skipped: insufficient time remains for this account.');
   } else process.exitCode = 1;

@@ -106,10 +106,12 @@ test('post-fix check-in allowance requires verified authentication and remains b
    return {ok:true,status:200,json:async()=>body};
   };
   await claim();assert.equal(puts,0);
-  state['app-auth-probe'].authVerified=true;await claim();assert.equal(puts,1);assert.equal(state['app-test'].history.length,3);
+  state['app-auth-probe'].history=[{authVerified:true}];await claim();assert.equal(puts,1);assert.equal(state['app-test'].history.length,3);
   state['app-test'].status='failed';await claim();assert.equal(puts,2);assert.equal(state['app-test'].history.length,4);
   state['app-test'].status='failed';await claim();assert.equal(puts,3);assert.equal(state['app-test'].history.length,5);
-  state['app-test'].status='failed';await claim();assert.equal(puts,3);
+  state['app-test'].status='failed';await claim();assert.equal(puts,4);assert.equal(state['app-test'].history.length,6);
+  state['app-test'].status='failed';await claim();assert.equal(puts,5);assert.equal(state['app-test'].history.length,7);
+  state['app-test'].status='failed';await claim();assert.equal(puts,5);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
 

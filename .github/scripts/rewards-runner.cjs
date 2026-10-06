@@ -151,6 +151,7 @@ async function runAccount(options = {}) {
   const diagnose = createDiagnostics(diagnostic);
   const started = Date.now();
   let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
+  let appAuthRejected = false, appCheckInAttempted = false;
   function persist(code, signal) {
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
@@ -164,6 +165,8 @@ async function runAccount(options = {}) {
     result.diagnostic = diagnostic;
     if (source.RUN_MODE === 'app-test') result.appCheckInVerified = appCheckInVerified;
     if (source.RUN_MODE === 'app-auth-probe') result.appAuthVerified = appAuthVerified;
+    result.appCheckIn = ['test', 'diagnostic', 'app-auth-probe'].includes(source.RUN_MODE) ? 'not_requested'
+      : appCheckInVerified ? 'verified' : appAuthRejected ? 'auth_rejected' : appCheckInAttempted ? 'unverified' : 'unknown';
     result.exitCode = number(code);
     result.signal = ['SIGTERM', 'SIGKILL', 'SIGINT'].includes(signal) ? signal : null;
     save(source.REPORT_PATH, result);
@@ -222,6 +225,8 @@ async function runAccount(options = {}) {
       diagnose(line);
       if (line.includes('[APP-AUTH-PROBE] Result') && line.includes('valid=true')) appAuthVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
+      if (line.includes('[DAILY-CHECK-IN]') && line.includes('Starting Daily Check-In')) appCheckInAttempted = true;
+      if (/\[(GET-APP-DASHBOARD-DATA|GET-APP-EARNABLE-POINTS)\]/.test(line) && /status code 401/.test(line)) appAuthRejected = true;
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
       const at = line.indexOf(marker);
       if (at < 0) return;
@@ -258,6 +263,14 @@ async function runAccount(options = {}) {
 const statusText = {completed: 'Đã kết thúc lượt chạy', failed: 'Lượt chạy gặp lỗi', needs_action: 'Cần kiểm tra', running: 'Chưa kết thúc'};
 const quotaText = {complete: 'Đã hết hạn mức', remaining: 'Còn hạn mức', unknown: 'Chưa xác minh', not_requested: 'Không được yêu cầu'};
 function accountMessage(r, email, url) {
+  if (process.env.RUN_MODE === 'app-auth-probe') return [
+    '🔬 <b>KIỂM TRA XÁC THỰC APP</b>',
+    `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
+    `📅 ${html(r.date)} · Giờ Việt Nam`, '',
+    r.appAuthVerified ? '✅ API App đã chấp nhận token.' : '❌ Chưa xác thực được API App.',
+    'Chế độ chỉ đọc; kết quả chi tiết đã lưu private.',
+    `<a href="${html(url)}">🔗 Xem lượt kiểm tra GitHub</a>`
+  ].join('\n');
   const daily = r.diagnostic?.dailySet;
   const dailyText = daily && daily.state !== 'unverified'
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
@@ -270,6 +283,7 @@ function accountMessage(r, email, url) {
     `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
     `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
     `🔥 <b>Daily Set:</b> ${dailyText}`,
+    `📱 <b>App check-in:</b> ${{verified:'Máy chủ xác nhận',auth_rejected:'Chưa thực hiện · API từ chối 401',unverified:'Đã gửi · Chưa xác minh',not_requested:'Không được yêu cầu'}[r.appCheckIn] || 'Chưa xác minh'}`,
     `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`,
     `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
   ];
@@ -278,7 +292,7 @@ function accountMessage(r, email, url) {
     lines.push(`📍 <b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
     if (r.diagnostic.errors.length) lines.push(`🛠️ <b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
   }
-  lines.push('', r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
+  lines.push('', ['test','app-test','diagnostic'].includes(process.env.RUN_MODE) ? '🔬 Đã kết thúc lượt kiểm tra riêng.' : r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
   lines.push(`<a href="${html(url)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }
@@ -306,7 +320,7 @@ async function prepareReport() {
     searchQuota: 'unknown', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'};
   // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
-    initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode};
+    initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn};
   await require('./rewards-state.cjs').savePrivateReport(output);
   await require('./rewards-operations.cjs').enqueue(`account-${id}`,
     accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));

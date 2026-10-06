@@ -123,22 +123,27 @@ async function claim() {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   let readingPointsBudget;
-  if (ctx.mode === 'app-read-test') {
+  if (['morning', 'retry', 'app-read-test'].includes(ctx.mode)) {
     let credited = 0;
-    const entries = [...(state[ctx.mode]?.history || []), ...(state[ctx.mode] ? [state[ctx.mode]] : [])];
+    let receiptsUnavailable = false;
+    const readingState = state['app-read-test'];
+    const entries = [...(readingState?.history || []), ...(readingState ? [readingState] : [])];
     for (const entry of entries) {
       if (!/^\d+$/.test(entry.runId || '') || !/^\d+$/.test(entry.runAttempt || '')) continue;
       const file = await api('/contents/reports/' + ctx.date + '/run-' + entry.runId + '-attempt-' + entry.runAttempt + '/account-' + ctx.slot + '.json?ref=' + BRANCH, {}, true);
-      if (!file) throw new Error('Reading receipts missing; cannot establish remaining credit budget');
+      if (!file) {
+        if (ctx.mode === 'app-read-test') throw new Error('Reading receipts missing; cannot establish remaining credit budget');
+        receiptsUnavailable = true; break;
+      }
       const report = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
       if (report.date !== ctx.date || report.accountId !== ctx.slot || !Number.isSafeInteger(report.pointsEarned) ||
           report.pointsEarned < 0 || report.pointsEarned > 30 || !Number.isSafeInteger(report.initialBalance) ||
           !Number.isSafeInteger(report.finalBalance) || report.finalBalance - report.initialBalance !== report.pointsEarned)
-        throw new Error('Reading receipts unverified');
+        { if (ctx.mode === 'app-read-test') throw new Error('Reading receipts unverified'); receiptsUnavailable = true; break; }
       credited += report.pointsEarned;
     }
-    readingPointsBudget = Math.max(0, 30 - credited);
-    if (!readingPointsBudget) { output('run', 'false'); console.log('Skipped: reading credit target already satisfied.'); return; }
+    readingPointsBudget = receiptsUnavailable ? 0 : Math.max(0, 30 - credited);
+    if (!readingPointsBudget && ctx.mode === 'app-read-test') { output('run', 'false'); console.log('Skipped: reading credit target already satisfied.'); return; }
     const folder = path.join(process.env.RUNNER_TEMP || path.dirname(process.env.GITHUB_OUTPUT), 'rewards-private');
     fs.mkdirSync(folder, {recursive: true, mode: 0o700});
     fs.writeFileSync(path.join(folder, 'reading-budget.json'), JSON.stringify({date:ctx.date, accountId:ctx.slot, points:readingPointsBudget}), {mode:0o600});

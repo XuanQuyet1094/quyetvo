@@ -33,7 +33,7 @@ async function fakeBot(source, options = {}) {
   try {
     const code = await api.runAccount({command: process.execPath, args: ['-e', source], timeoutMs: 3000,
       killGraceMs: 20, ...options, env: {ACCOUNT_SLOT: '2', ACCOUNT_EMAIL: 'test@example.invalid',
-        RUNNER_TEMP: dir, BOT_DIR: dir, ACCOUNT_PASSWORD: 'synthetic-password', ACCOUNT_TOTP_SECRET: 'JBSWY3DPEHPK3PXP', REPORT_PATH: path.join(dir, 'result.json')}});
+        RUNNER_TEMP: dir, BOT_DIR: dir, ACCOUNT_PASSWORD: 'synthetic-password', ACCOUNT_TOTP_SECRET: 'JBSWY3DPEHPK3PXP', REPORT_PATH: path.join(dir, 'result.json'), ...(options.env || {})}});
     return {code, result: JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8')), privateLog: fs.readFileSync(path.join(dir, 'rewards-private', 'account-2.log'), 'utf8')};
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 }
@@ -60,6 +60,13 @@ test('a completed web flow retains rejected App authentication separately', asyn
  const result=await fakeBot(`console.log('[ERROR] MOBILE [GET-APP-DASHBOARD-DATA] Error fetching dashboard data: Request failed with status code 401');console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify(fixture)}));`);
  assert.equal(result.code,0);assert.equal(result.result.status,'completed');assert.equal(result.result.appCheckIn,'auth_rejected');
  assert.ok(api.accountMessage(result.result,'fixture@example.invalid','https://example.invalid').includes('Chưa thực hiện · API từ chối 401'));
+});
+test('the App probe report requires two confirmed reads, not one successful response', async () => {
+ const final=`console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify(fixture)}));`;
+ const single=await fakeBot(`console.log('[APP-AUTH-PROBE] Result | valid=true');${final}`,{env:{RUN_MODE:'app-auth-probe'}});
+ assert.equal(single.code,1);assert.equal(single.result.appAuthVerified,false);assert.equal(single.result.errorCode,'APP_AUTH_PROBE_FAILED');
+ const stable=await fakeBot(`console.log('[APP-AUTH-PROBE] Stable read confirmed | variant=fixture | successfulReads=2');${final}`,{env:{RUN_MODE:'app-auth-probe'}});
+ assert.equal(stable.code,0);assert.equal(stable.result.appAuthVerified,true);assert.equal(stable.result.appCheckIn,'not_requested');
 });
 test('missing final result and timeout are not successful', async () => {
   const empty = await fakeBot('process.exit(0)');

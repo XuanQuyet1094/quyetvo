@@ -43,3 +43,5 @@ jobs:
 # Verify Android dashboard fallback independently of iOS rejection.
 
 # Verify the App transport fix after the successful read-only comparison.
+
+# Check-in planning uses the already accepted App snapshot.

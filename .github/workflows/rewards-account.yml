@@ -55,6 +55,7 @@ jobs:
       - name: Check and reserve daily attempt in private state
         id: claim
         env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs claim
 
@@ -62,7 +63,7 @@ jobs:
         if: ${{ steps.claim.outputs.run == 'true' }}
         uses: actions/checkout@v4
         with:
-          repository: XuanQuyet1094/Microsoft-Rewards-Script
+          repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
           ref: v4
           path: bot
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
@@ -86,9 +87,15 @@ jobs:
         if: ${{ steps.claim.outputs.run == 'true' }}
         timeout-minutes: 3
         env:
+          AZDIGI_SSH_HOST: ${{ secrets.AZDIGI_SSH_HOST }}
+          AZDIGI_SSH_USER: ${{ secrets.AZDIGI_SSH_USER }}
+          AZDIGI_SSH_PORT: ${{ secrets.AZDIGI_SSH_PORT }}
           AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
           AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
         run: |
+          : "${AZDIGI_SSH_HOST:?Missing AZDIGI_SSH_HOST}"
+          : "${AZDIGI_SSH_USER:?Missing AZDIGI_SSH_USER}"
+          : "${AZDIGI_SSH_PORT:?Missing AZDIGI_SSH_PORT}"
           : "${AZDIGI_SSH_KEY:?Missing AZDIGI_SSH_KEY}"
           : "${AZDIGI_KNOWN_HOSTS:?Missing AZDIGI_KNOWN_HOSTS}"
           install -d -m 700 ~/.ssh
@@ -101,8 +108,8 @@ jobs:
             -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
             -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
-            -f -N -D 127.0.0.1:1080 -p 2210 \
-            -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
+            -f -N -D 127.0.0.1:1080 -p "$AZDIGI_SSH_PORT" \
+            -i ~/.ssh/azdigi_key "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST"
           for url in https://rewards.bing.com/ https://www.bing.com/; do
             curl --fail --silent --show-error --location \
               --connect-timeout 15 --max-time 45 \
@@ -123,6 +130,7 @@ jobs:
       - name: Persist result and redacted private log
         if: ${{ always() && steps.claim.outputs.run == 'true' }}
         env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
           STATE_STORED: ${{ steps.claim.outputs.stored }}
           JOB_STATUS: ${{ job.status }}
@@ -141,9 +149,13 @@ jobs:
 
       - name: Cleanup tunnel and sensitive files
         if: ${{ always() }}
+        env:
+          AZDIGI_SSH_HOST: ${{ secrets.AZDIGI_SSH_HOST }}
+          AZDIGI_SSH_USER: ${{ secrets.AZDIGI_SSH_USER }}
+          AZDIGI_SSH_PORT: ${{ secrets.AZDIGI_SSH_PORT }}
         run: |
           if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
-            ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p 2210 labotecc@hv42-25048.azdigihost.com || true
+            ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p "$AZDIGI_SSH_PORT" "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST" || true
           fi
           rm -f ~/.ssh/azdigi_key ~/.ssh/known_hosts "$REPORT_PATH"
           rm -f "$BOT_DIR/.env" "$BOT_DIR/config.json"

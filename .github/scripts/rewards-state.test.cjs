@@ -91,7 +91,7 @@ test('claim is persisted before authorization and cannot be claimed twice', asyn
     assert.equal(fs.readFileSync(process.env.GITHUB_OUTPUT,'utf8'),'run=false\n');
   } finally { global.fetch=oldFetch; for(const k of Object.keys(process.env)) if(!(k in prev))delete process.env[k]; Object.assign(process.env,prev);fs.rmSync(tmp,{recursive:true,force:true}); }
 });
-test('post-fix check-in allowance requires verified authentication and cannot authorize a fifth attempt', async (t) => {
+test('post-fix check-in allowance requires verified authentication and remains bounded', async (t) => {
  t.mock.method(Date,'now',()=>Date.parse('2026-10-06T09:00:00Z'));
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'app-state-')),previous={...process.env},oldFetch=global.fetch;
  let state={schema:1,date:'2026-10-06',accountId:1,'app-test':{status:'failed',checkInVerified:false,history:[{},{}]},'app-auth-probe':{authVerified:false}},puts=0;
@@ -107,7 +107,8 @@ test('post-fix check-in allowance requires verified authentication and cannot au
   };
   await claim();assert.equal(puts,0);
   state['app-auth-probe'].authVerified=true;await claim();assert.equal(puts,1);assert.equal(state['app-test'].history.length,3);
-  state['app-test'].status='failed';await claim();assert.equal(puts,1);
+  state['app-test'].status='failed';await claim();assert.equal(puts,2);assert.equal(state['app-test'].history.length,4);
+  state['app-test'].status='failed';await claim();assert.equal(puts,2);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
 

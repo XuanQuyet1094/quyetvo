@@ -111,7 +111,8 @@ test('post-fix check-in allowance requires verified authentication and remains b
   state['app-test'].status='failed';await claim();assert.equal(puts,3);assert.equal(state['app-test'].history.length,5);
   state['app-test'].status='failed';await claim();assert.equal(puts,4);assert.equal(state['app-test'].history.length,6);
   state['app-test'].status='failed';await claim();assert.equal(puts,5);assert.equal(state['app-test'].history.length,7);
-  state['app-test'].status='failed';await claim();assert.equal(puts,5);
+  state['app-test'].status='failed';await claim();assert.equal(puts,6);assert.equal(state['app-test'].history.length,8);
+  state['app-test'].status='failed';await claim();assert.equal(puts,6);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
 

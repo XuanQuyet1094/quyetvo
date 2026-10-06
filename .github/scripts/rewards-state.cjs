@@ -109,7 +109,7 @@ async function claim() {
   const appReadObserved = probe?.authVerified === true || (probe?.history || []).some(entry => entry.authVerified === true);
   if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
         (state['app-auth-probe'].status === 'running' || state['app-test']?.checkInVerified === true ||
-         (state['app-auth-probe'].history || []).length >= 3)))) ||
+         (state['app-auth-probe'].history || []).length >= 4)))) ||
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||

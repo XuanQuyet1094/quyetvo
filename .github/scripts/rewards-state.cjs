@@ -113,7 +113,9 @@ async function claim() {
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
-      (ctx.mode === 'app-read-test' && (ctx.slot !== 1 || state['app-read-test'])) ||
+      (ctx.mode === 'app-read-test' && (ctx.slot !== 1 || (state['app-read-test'] &&
+        (state['app-read-test'].status === 'running' || state['app-read-test'].errorCode !== 'HTTP_401' ||
+         (state['app-read-test'].history || []).length >= 1)))) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
         (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
          ((state['app-test'].history || []).length >= (appReadObserved ? 8 : 2) && state['app-test'].errorCode !== 'SETUP_FAILED') ||
@@ -121,7 +123,7 @@ async function claim() {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
-  const history = ['app-test', 'app-auth-probe'].includes(ctx.mode) && state[ctx.mode]
+  const history = ['app-test', 'app-auth-probe', 'app-read-test'].includes(ctx.mode) && state[ctx.mode]
     ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
   state[ctx.mode] = {...(history.length ? {history} : {}), status: 'running', retryable: false, errorCode: null,
     runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,

@@ -64,3 +64,5 @@ jobs:
 # Verify quota reconciliation and bounded reading continuation requested by the owner.
 
 # Verify refreshed OAuth credentials and exact remaining reading-credit budget.
+
+# Verify reading budget also applies to scheduled work without repeating credited points.

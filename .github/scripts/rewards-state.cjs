@@ -108,11 +108,15 @@ async function claim() {
   if ((ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
-      (ctx.mode === 'app-test' && (ctx.slot !== 1 || state['app-test']))) {
+      (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&
+        (state['app-test'].status === 'running' || state['app-test'].checkInVerified === true ||
+         (state['app-test'].history || []).length >= 1))))) {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
-  state[ctx.mode] = {status: 'running', retryable: false, errorCode: null,
+  const history = ctx.mode === 'app-test' && state[ctx.mode]
+    ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
+  state[ctx.mode] = {...(history.length ? {history} : {}), status: 'running', retryable: false, errorCode: null,
     runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     startedAt: new Date().toISOString()};
   await put(ctx, state, sha); // SHA conflict fails closed instead of launching a duplicate.
@@ -161,7 +165,7 @@ async function finish() {
   catch { console.error('Private bot log upload failed; private status will still be saved.'); }
   try { await uploadPrivateLog(ctx, 'setup'); }
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
-  state[ctx.mode] = {...entry, ...stateResult(result), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
+  state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(logPath ? {logPath} : {}), finishedAt: new Date().toISOString()};
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }

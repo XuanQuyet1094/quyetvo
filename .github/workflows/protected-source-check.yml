@@ -46,7 +46,7 @@ jobs:
           quietBuild(process.env,[
             ['Dependencies','npm',['ci','--include=dev']],
             ['Build','npm',['run','build']],
-            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs']]
+            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs','scripts/main/appReading.test.cjs']]
           ]).catch(()=>{console.error('Protected verification failed; details remain private.');process.exitCode=1;});
           NODE
       - name: Preserve private verification details
@@ -56,3 +56,5 @@ jobs:
           REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs upload-log
+
+# Verify isolated reading fallback and balance evidence after the dashboard fix.

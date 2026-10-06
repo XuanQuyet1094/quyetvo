@@ -223,7 +223,7 @@ async function runAccount(options = {}) {
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
-      if (line.includes('[APP-AUTH-PROBE] Result') && line.includes('valid=true')) appAuthVerified = true;
+      if (line.includes('[APP-AUTH-PROBE] Stable read confirmed') && line.includes('successfulReads=2')) appAuthVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Starting Daily Check-In')) appCheckInAttempted = true;
       if (/\[(GET-APP-DASHBOARD-DATA|GET-APP-EARNABLE-POINTS)\]/.test(line) && /status code 401/.test(line)) appAuthRejected = true;

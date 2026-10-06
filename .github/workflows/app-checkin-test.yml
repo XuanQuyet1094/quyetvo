@@ -41,3 +41,5 @@ jobs:
 # Retest app identity correction; at most three App-only attempts per Vietnam day.
 
 # Verify Android dashboard fallback independently of iOS rejection.
+
+# Verify the App transport fix after the successful read-only comparison.

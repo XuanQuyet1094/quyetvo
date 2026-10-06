@@ -1,0 +1,39 @@
+name: App check-in verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/app-checkin-test.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+      run: ${{ steps.plan.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/rewards-schedule.cjs plan
+  verify:
+    needs: plan
+    if: ${{ needs.plan.outputs.run == 'true' }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      run_mode: app-test
+      run_date: ${{ needs.plan.outputs.date }}
+    secrets: inherit

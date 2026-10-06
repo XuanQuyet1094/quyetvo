@@ -180,3 +180,18 @@ test('private reports stay scoped to this run and never contain identity', async
     Object.assign(process.env,prev);
   }
 });
+
+test('reading protocol comparison is allowed once only after an explicit rejected POST',async(t)=>{
+ t.mock.method(Date,'now',()=>Date.parse('2026-10-07T00:10:00+07:00'));
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'read-state-')),prev={...process.env},oldFetch=global.fetch;
+ let state={schema:1,date:'2026-10-07',accountId:1,'app-read-test':{status:'needs_action',errorCode:'HTTP_401'}},puts=0;
+ try{
+ Object.assign(process.env,{RUN_DATE:state.date,ACCOUNT_SLOT:'1',RUN_MODE:'app-read-test',REWARDS_STATE_TOKEN:'fixture',REWARDS_PRIVATE_REPO:'example/private-state',GITHUB_RUN_ID:'2',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:path.join(dir,'out')});
+ global.fetch=async(url,options={})=>{let body;if(options.method==='PUT'){state=JSON.parse(Buffer.from(JSON.parse(options.body).content,'base64'));puts++;body={};}else if(url.endsWith('/example/private-state'))body={private:true};else if(url.includes('/branches/'))body={name:'rewards-state'};else body={sha:'fixture',content:Buffer.from(JSON.stringify(state)).toString('base64')};return {ok:true,status:200,json:async()=>body};};
+ await claim();assert.equal(puts,1);assert.equal(state['app-read-test'].history.length,1);
+ await claim();assert.equal(puts,1);
+ state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,1);
+ state['app-read-test']={status:'completed',errorCode:null};await claim();assert.equal(puts,1);
+ state['app-read-test']={status:'failed',errorCode:'NETWORK_TIMEOUT'};await claim();assert.equal(puts,1);
+ }finally{global.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in prev))delete process.env[k];Object.assign(process.env,prev);fs.rmSync(dir,{recursive:true,force:true});}
+});

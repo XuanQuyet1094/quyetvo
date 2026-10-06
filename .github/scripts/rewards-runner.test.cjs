@@ -61,6 +61,10 @@ test('a completed web flow retains rejected App authentication separately', asyn
  assert.equal(result.code,0);assert.equal(result.result.status,'completed');assert.equal(result.result.appCheckIn,'auth_rejected');
  assert.ok(api.accountMessage(result.result,'fixture@example.invalid','https://example.invalid').includes('Chưa thực hiện · API từ chối 401'));
 });
+test('a rejected check-in submission is reported as App authentication rejection', async () => {
+ const r=await fakeBot(`console.log('[DAILY-CHECK-IN] Starting Daily Check-In');console.log('[ERROR] MOBILE [DAILY-CHECK-IN] Error during Daily Check-In | message=Request failed with status code 401');console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify(fixture)}));`);
+ assert.equal(r.result.appCheckIn,'auth_rejected');assert.equal(r.result.appCheckInVerified,undefined);
+});
 test('the App probe report requires two confirmed reads, not one successful response', async () => {
  const final=`console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify(fixture)}));`;
  const single=await fakeBot(`console.log('[APP-AUTH-PROBE] Result | valid=true');${final}`,{env:{RUN_MODE:'app-auth-probe'}});

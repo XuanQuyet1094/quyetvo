@@ -113,7 +113,7 @@ async function claim() {
       (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
-      (ctx.mode === 'app-read-test' && (ctx.slot !== 1 || (state['app-read-test'] &&
+      (ctx.mode === 'app-read-test' && (![1,3].includes(ctx.slot) || (state['app-read-test'] &&
         (state['app-read-test'].status === 'running' || state['app-read-test'].errorCode !== 'HTTP_401' ||
          (state['app-read-test'].history || []).length >= 4)))) ||
       (ctx.mode === 'app-test' && (ctx.slot !== 1 || (state['app-test'] &&

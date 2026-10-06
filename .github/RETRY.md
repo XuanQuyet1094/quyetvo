@@ -22,7 +22,19 @@ After adding the token, the next morning run will create state files. The aftern
 
 ## Local validation
 
-`node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs`
+`node --test .github/scripts/rewards-runner.test.cjs .github/scripts/rewards-state.test.cjs .github/scripts/rewards-operations.test.cjs`
+
+## Preflight, private notifications and log retention
+
+Each earning worker checks account credentials, SSH settings, private source read access, private state write/delete access, and Telegram getMe/getChat before reserving an earning attempt. Telegram checks do not send messages. A failed preflight consumes no daily attempt.
+
+Account reports are persisted privately before notification delivery. A private notification record is reserved by its Git blob SHA before sending, then marked sent. Confirmed Telegram rejections can be retried by the report-only recovery workflow, up to three total attempts per notification. Timeout or ambiguous network outcomes become uncertain; records left sending after interruption are also not sent again automatically. Verify Telegram manually in these cases, because exactly-once delivery cannot be guaranteed across an external API and Git storage. Saved payloads contain the private formatted report, including account identity, but no bot token or authentication credentials. They remain private; they do not cross public job outputs.
+
+Report-only recovery runs at 08:30, 12:30, 16:30 and 20:30 Vietnam time, or via manual dispatch. It considers the latest three Vietnam calendar days of notifications and never launches the bot or claims an earning attempt. A chat ID change refuses to deliver older messages to a new destination.
+
+Install/browser/build output is capped, redacted and saved privately under setup-logs. Public logs show only fixed success/failure messages.
+
+Private log retention runs daily at 06:30 Vietnam time, or via manual dispatch, and removes older files only under logs, diagnostics and setup-logs. It keeps today and the preceding two Vietnam calendar dates. Reports, notifications, account state and retry budgets are preserved. The branch update is non-forced so concurrent state writes cannot be overwritten. GitHub scheduling can be delayed. This removes files from the current branch only; historical Git objects are not purged.
 
 ## Private connection settings
 

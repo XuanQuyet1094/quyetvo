@@ -277,10 +277,10 @@ async function report() {
   const r = read(process.env.REPORT_PATH) || {accountId: id, date: dateVN(), status: 'failed',
     initialBalance: null, finalBalance: null, pointsEarned: null, durationSeconds: null,
     searchQuota: 'unknown', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'};
-  // Only numeric balances and fixed labels cross job boundaries; never email or logs.
+  // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
     initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode};
-  fs.appendFileSync(process.env.GITHUB_OUTPUT, 'result=' + JSON.stringify(output) + '\n');
+  await require('./rewards-state.cjs').savePrivateReport(output);
   await telegram(accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
 }
 function summaryMessage(jobs, env = process.env) {
@@ -314,7 +314,11 @@ async function main() {
     case 'configure-login-diagnostic': configure(true); break;
     case 'run': process.exitCode = await runAccount(); break;
     case 'report': await report(); break;
-    case 'summary': await telegram(summaryMessage(JSON.parse(process.env.JOB_RESULTS))); break;
+    case 'summary': {
+      const jobs = await require('./rewards-state.cjs').readPrivateReports(JSON.parse(process.env.JOB_RESULTS));
+      await telegram(summaryMessage(jobs));
+      break;
+    }
     case 'rest': {
       const seconds = randomInt(100, 181);
       console.log(`Resting ${seconds} seconds before the next account.`);

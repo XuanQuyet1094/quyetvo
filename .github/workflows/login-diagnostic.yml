@@ -46,7 +46,7 @@ jobs:
       - name: Checkout private bot source
         uses: actions/checkout@v4
         with:
-          repository: XuanQuyet1094/Microsoft-Rewards-Script
+          repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
           ref: v4
           path: bot
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
@@ -70,9 +70,15 @@ jobs:
       - name: Start verified AZDIGI SOCKS5 tunnel
         timeout-minutes: 3
         env:
+          AZDIGI_SSH_HOST: ${{ secrets.AZDIGI_SSH_HOST }}
+          AZDIGI_SSH_USER: ${{ secrets.AZDIGI_SSH_USER }}
+          AZDIGI_SSH_PORT: ${{ secrets.AZDIGI_SSH_PORT }}
           AZDIGI_SSH_KEY: ${{ secrets.AZDIGI_SSH_KEY }}
           AZDIGI_KNOWN_HOSTS: ${{ secrets.AZDIGI_KNOWN_HOSTS }}
         run: |
+          : "${AZDIGI_SSH_HOST:?Missing AZDIGI_SSH_HOST}"
+          : "${AZDIGI_SSH_USER:?Missing AZDIGI_SSH_USER}"
+          : "${AZDIGI_SSH_PORT:?Missing AZDIGI_SSH_PORT}"
           : "${AZDIGI_SSH_KEY:?Missing AZDIGI_SSH_KEY}"
           : "${AZDIGI_KNOWN_HOSTS:?Missing AZDIGI_KNOWN_HOSTS}"
           install -d -m 700 ~/.ssh
@@ -85,8 +91,8 @@ jobs:
             -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
             -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
-            -f -N -D 127.0.0.1:1080 -p 2210 \
-            -i ~/.ssh/azdigi_key labotecc@hv42-25048.azdigihost.com
+            -f -N -D 127.0.0.1:1080 -p "$AZDIGI_SSH_PORT" \
+            -i ~/.ssh/azdigi_key "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST"
           curl --fail --silent --show-error --location \
             --connect-timeout 15 --max-time 45 \
             --proxy socks5h://127.0.0.1:1080 https://login.live.com/ -o /dev/null
@@ -108,6 +114,7 @@ jobs:
         if: always()
         env:
           RUN_DATE: ${{ steps.clock.outputs.date }}
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: |
           : "${REWARDS_STATE_TOKEN:?Missing REWARDS_STATE_TOKEN}"
@@ -121,7 +128,7 @@ jobs:
       - name: Report diagnostic log location
         if: always()
         run: |
-          echo "Detailed redacted log is stored in the private Microsoft-Rewards-Script repository, branch rewards-state, under diagnostics/${{ steps.clock.outputs.date }}/ for account ${ACCOUNT_SLOT}."
+          echo "Detailed redacted log is stored in the configured private repository, branch rewards-state, under diagnostics/${{ steps.clock.outputs.date }}/ for account ${ACCOUNT_SLOT}."
           echo "This workflow does not update daily run state and does not run earning/search tasks."
 
       - name: Mark diagnostic outcome

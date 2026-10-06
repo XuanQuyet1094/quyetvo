@@ -2,9 +2,15 @@
 const {telegram} = require('./rewards-runner.cjs');
 const {randomUUID} = require('node:crypto');
 const branch = 'rewards-state';
-const repo = 'XuanQuyet1094/Microsoft-Rewards-Script';
+function privateRepository() {
+  const value = process.env.REWARDS_PRIVATE_REPO || '';
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error('Missing or invalid REWARDS_PRIVATE_REPO');
+  }
+  return value;
+}
 async function api(route, method = 'GET', body) {
-  const r = await fetch(`https://api.github.com/repos/${repo}${route}`, {
+  const r = await fetch(`https://api.github.com/repos/${privateRepository()}${route}`, {
     method, headers: {Authorization: `Bearer ${process.env.REWARDS_STATE_TOKEN}`,
       Accept: 'application/vnd.github+json', 'Content-Type': 'application/json'},
     ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(20000)

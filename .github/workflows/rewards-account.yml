@@ -1,4 +1,4 @@
-name: Rewards account worker
+name: Background worker
 
 on:
   workflow_call:
@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   account:
+    name: Processing
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     defaults:

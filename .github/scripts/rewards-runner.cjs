@@ -195,7 +195,7 @@ async function runAccount(options = {}) {
   const accountLimit = options.timeoutMs ?? 75 * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
-  const heartbeat = setInterval(() => console.log(`Account ${id}/6: running; raw logs remain private.`), 60000);
+  const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
   const privateLogPath = captureLogPath(source, id);
   const privateLog = fs.createWriteStream(privateLogPath, {flags: 'w', mode: 0o600});
   const maxRawLogBytes = 2 * 1024 * 1024;
@@ -241,7 +241,7 @@ async function runAccount(options = {}) {
   process.off('SIGINT', onSignal);
   killGroup('SIGKILL');
   const result = persist(code, signal);
-  console.log(`Account ${id}/6: ${result.status}; report prepared.`);
+  console.log('Worker finished; report prepared privately.');
   return result.status === 'completed' && code === 0 && !signal ? 0 : 1;
 }
 

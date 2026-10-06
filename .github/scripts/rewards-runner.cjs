@@ -19,7 +19,7 @@ const dateVN = () => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Ho_Chi_Mi
 const errors = new Set(['ACCOUNT_LOCKED', 'BOT_WARNING', 'AUTH_REQUIRED', 'NETWORK_TIMEOUT',
   'DASHBOARD_UNAVAILABLE', 'FLOW_FAILED', 'BALANCE_UNVERIFIED', 'STALE_RUN_DATE',
   'INVALID_ACCOUNT_SELECTION', 'MISSING_ACCOUNT_EMAIL', 'PROCESS_FAILED', 'NO_FINAL_RESULT',
-  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED']);
+  'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED', 'APP_CHECKIN_UNVERIFIED']);
 function errorLabel(value) {
   return errors.has(value) || /^HTTP_[45]\d\d$/.test(String(value)) ? value : value ? 'FLOW_FAILED' : null;
 }
@@ -148,10 +148,11 @@ async function runAccount(options = {}) {
   const diagnostic = {stage: 'STARTING', loginState: null, errors: [], dailySet: null};
   const diagnose = createDiagnostics(diagnostic);
   const started = Date.now();
-  let last = null, stopped = null;
+  let last = null, stopped = null, appCheckInVerified = false;
   function persist(code, signal) {
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
+    if (source.RUN_MODE === 'app-test' && !appCheckInVerified && !stopped) stopped = 'APP_CHECKIN_UNVERIFIED';
     if (stopped || code !== 0 || signal || !result.finished) {
       result.status = 'failed';
       result.errorCode = stopped || result.errorCode || (code !== 0 || signal ? 'PROCESS_FAILED' : 'NO_FINAL_RESULT');
@@ -214,6 +215,7 @@ async function runAccount(options = {}) {
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
+      if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
       const at = line.indexOf(marker);
       if (at < 0) return;

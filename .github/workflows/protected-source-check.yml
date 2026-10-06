@@ -62,3 +62,5 @@ jobs:
 # Verify aligned type-101 request fields before a bounded live protocol comparison.
 
 # Verify quota reconciliation and bounded reading continuation requested by the owner.
+
+# Verify refreshed OAuth credentials and exact remaining reading-credit budget.

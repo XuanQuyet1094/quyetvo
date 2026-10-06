@@ -1,0 +1,58 @@
+name: Protected source verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/protected-source-check.yml']
+permissions:
+  contents: read
+concurrency:
+  group: rewards-source-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BOT_DIR: ${{ github.workspace }}/bot
+      ACCOUNT_SLOT: '1'
+      RUN_MODE: app-test
+    steps:
+      - name: Checkout automation
+        uses: actions/checkout@v4
+        with:
+          path: automation
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Set verification date
+        run: |
+          node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'RUN_DATE='+new Date(Date.now()+7*3600000).toISOString().slice(0,10)+'\n')"
+      - name: Checkout protected source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          ref: v4
+          path: bot
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Build and verify without running accounts
+        run: |
+          node <<'NODE'
+          const {quietBuild}=require('./automation/.github/scripts/rewards-operations.cjs');
+          quietBuild(process.env,[
+            ['Dependencies','npm',['ci','--include=dev']],
+            ['Build','npm',['run','build']],
+            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs']]
+          ]).catch(()=>{console.error('Protected verification failed; details remain private.');process.exitCode=1;});
+          NODE
+      - name: Preserve private verification details
+        if: ${{ always() }}
+        env:
+          RUN_MODE: diagnostic
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+        run: node automation/.github/scripts/rewards-state.cjs upload-log

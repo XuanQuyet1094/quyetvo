@@ -191,6 +191,7 @@ function safeReport(value, slot, date) {
   }
   const metric = (v, nonnegative = false) => Number.isSafeInteger(v) && (!nonnegative || v >= 0) ? v : null;
   return {accountId: slot, date, status: value.status,
+    appCheckIn: ['verified','auth_rejected','unverified','not_requested','unknown'].includes(value.appCheckIn) ? value.appCheckIn : 'unknown',
     pointsEarned: metric(value.pointsEarned),
     initialBalance: metric(value.initialBalance, true),
     finalBalance: metric(value.finalBalance, true),

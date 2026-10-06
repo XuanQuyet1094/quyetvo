@@ -192,9 +192,10 @@ test('user-authorized reading continuation is bounded and requires an explicit r
  await claim();assert.equal(puts,1);
  state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,2);
  state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,3);
- state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,3);
- state['app-read-test']={status:'completed',errorCode:null};await claim();assert.equal(puts,3);
- state['app-read-test']={status:'failed',errorCode:'NETWORK_TIMEOUT'};await claim();assert.equal(puts,3);
+ state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,4);
+ state['app-read-test'].status='needs_action';state['app-read-test'].errorCode='HTTP_401';await claim();assert.equal(puts,4);
+ state['app-read-test']={status:'completed',errorCode:null};await claim();assert.equal(puts,4);
+ state['app-read-test']={status:'failed',errorCode:'NETWORK_TIMEOUT'};await claim();assert.equal(puts,4);
  }finally{global.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in prev))delete process.env[k];Object.assign(process.env,prev);fs.rmSync(dir,{recursive:true,force:true});}
 });
 

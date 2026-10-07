@@ -57,4 +57,4 @@ jobs:
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs upload-log
 
-# Verify one renewed App dashboard read after authentication rejection and Vietnam check-in day boundaries.
+# Verify Vietnam App check-in and Daily Set day boundaries independently of the host timezone.

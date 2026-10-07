@@ -117,3 +117,23 @@ test('private log redactor removes tokens, auth headers, email, codes, and URL p
   assert.ok(safe.includes('TOTP secret is malformed'));
   assert.ok(safe.includes('https://example.invalid/callback?[REDACTED]'));
 });
+
+test('per-task evidence is scoped to today and reading credit remains private and separate from total points', async () => {
+ const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+ const event={date,tasks:{dailySet:'complete',appCheckIn:'missing',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'missing',token:'secret'}};
+ const end={...fixture,date};
+ const r=await fakeBot(`console.log('DAILY_TASK_VERIFICATION '+JSON.stringify(${JSON.stringify(event)}));
+ console.log('DAILY_TASK_VERIFICATION '+JSON.stringify({date:'2000-01-01',tasks:{dailySet:'missing'}}));
+ console.log('DAILY_READING_CREDIT '+JSON.stringify({date:${JSON.stringify(date)},points:30}));
+ console.log('RECOVERY_ACCOUNT_RESULT '+JSON.stringify(${JSON.stringify(end)}));`,{env:{RUN_DATE:date}});
+ assert.equal(r.result.tasks.dailySet,'complete');assert.equal(r.result.tasks.mobileSearch,'unknown');
+ assert.equal(r.result.tasks.token,undefined);assert.equal(r.result.readingPoints,30);
+ assert.equal(r.result.pointsEarned,159);
+ const text=api.accountMessage(r.result,'fixture@example.invalid','https://example.invalid');
+ assert.ok(text.includes('Read to Earn'));assert.ok(text.includes('Còn thiếu'));assert.ok(text.includes('Chưa xác minh'));
+});
+test('ambiguous reading errors never certify zero credit for a later repeat',async()=>{
+ const r=await fakeBot(`console.log('[ERROR] MOBILE [READ-TO-EARN] Error during Read to Earn | message=timeout');
+ console.log('RECOVERY_ACCOUNT_RESULT '+JSON.stringify(${JSON.stringify(fixture)}));`);
+ assert.equal(r.result.readingPoints,null);
+});

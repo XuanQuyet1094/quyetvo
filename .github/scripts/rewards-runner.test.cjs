@@ -118,7 +118,8 @@ test('private log redactor removes tokens, auth headers, email, codes, and URL p
   assert.ok(safe.includes('https://example.invalid/callback?[REDACTED]'));
 });
 
-test('per-task evidence is scoped to today and reading credit remains private and separate from total points', async () => {
+test('per-task evidence is scoped to today and reading credit remains private and separate from total points', async t => {
+ t.mock.method(Date,'now',()=>Date.parse('2026-10-07T18:17:00+07:00'));
  const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
  const event={date,tasks:{dailySet:'complete',appCheckIn:'missing',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'missing',token:'secret'}};
  const end={...fixture,date};

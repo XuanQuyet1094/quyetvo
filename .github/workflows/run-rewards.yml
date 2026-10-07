@@ -6,7 +6,7 @@ on:
       run_mode:
         description: Morning or retry mode; account 1 test mode runs Daily Set only
         type: choice
-        options: [morning, retry]
+        options: [morning, retry, reconcile]
         default: morning
       run_scope:
         description: Run all six accounts, or test only account 1 Daily Set
@@ -20,6 +20,7 @@ on:
   schedule:
     - cron: '17 19 * * *' # 02:17 Vietnam
     - cron: '37 5 * * *' # 12:37 Vietnam: retry technical failures only
+    - cron: '17 11 * * *' # 18:17 Vietnam: verify and repair only confirmed missing tasks
 
 permissions:
   contents: read

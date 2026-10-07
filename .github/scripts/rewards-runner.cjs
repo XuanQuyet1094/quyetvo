@@ -8,6 +8,7 @@ const {randomInt} = require('node:crypto');
 const {setTimeout: wait} = require('node:timers/promises');
 const createDiagnostics = require('./rewards-diagnostics.cjs');
 const schedule = require('./rewards-schedule.cjs');
+const taskStatus = require('./rewards-tasks.cjs');
 
 const slots = [1, 2, 3, 4, 5, 6];
 const number = v => typeof v === 'number' && Number.isSafeInteger(v) ? v : null;
@@ -83,13 +84,14 @@ function cleanResult(r, id) {
 }
 function childEnvironment(source, id) {
   const env = {...source};
-  if (['morning', 'retry', 'app-read-test'].includes(source.RUN_MODE)) {
+  if (['morning', 'retry', 'reconcile', 'app-read-test'].includes(source.RUN_MODE)) {
     const budget = read(path.join(source.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
     if (!budget && source.RUN_MODE === 'app-read-test') throw new Error('Missing private reading budget');
     if (budget) {
       if (budget.date !== source.RUN_DATE || budget.accountId !== id || !Number.isSafeInteger(budget.points) || budget.points < 0 || budget.points > 30)
         throw new Error('Invalid private reading budget');
       env.REWARDS_READING_POINTS_BUDGET = String(budget.points);
+      env.REWARDS_READING_RECEIPTS_VERIFIED = budget.verified === false ? 'false' : 'true';
     }
   }
   for (const key of Object.keys(env)) {
@@ -104,6 +106,7 @@ function childEnvironment(source, id) {
     [`ACCOUNT_${id}_PROXY_HTTP`]: 'true',
     [`ACCOUNT_${id}_PROXY_URL`]: 'socks5://127.0.0.1', [`ACCOUNT_${id}_PROXY_PORT`]: '1080',
     REWARDS_APP_AUTH_PROBE: source.RUN_MODE === 'app-auth-probe' ? 'true' : 'false',
+    REWARDS_READING_CREDITED_THIS_RUN: '0',
     REWARDS_ACCOUNT_IDS: String(id),
     REWARDS_REPORT_DIR: path.join(source.RUNNER_TEMP, 'rewards-private')
   });
@@ -145,7 +148,20 @@ function configure(diagnosticOnly = false) {
       cfg.activities.urlReward = process.env.RUN_MODE === 'test';
     }
   }
-  if (['app-test', 'app-auth-probe', 'app-read-test'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
+  if (process.env.RUN_MODE === 'reconcile') {
+    cfg.ensureStreakProtection = false;
+    cfg.autoClaimPunchcardRewards = false;
+    for (const key of Object.keys(cfg.workers || {})) cfg.workers[key] = false;
+    // Acquire fresh App data; the source enables only tasks proven missing.
+    cfg.workers.doDailySet = true;
+    cfg.workers.doDailyCheckIn = true;
+    cfg.workers.doReadToEarn = true;
+    for (const key of Object.keys(cfg.activities || {})) cfg.activities[key] = false;
+    cfg.activities.urlReward = true;
+    cfg.activities.searchOnBing = true;
+    cfg.searchSettings.parallelSearching = false;
+  }
+  if (['test', 'reconcile', 'app-test', 'app-auth-probe', 'app-read-test'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
   const readingBudget = read(path.join(process.env.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
   if (readingBudget?.date === process.env.RUN_DATE && readingBudget?.accountId === Number(process.env.ACCOUNT_SLOT) && readingBudget?.points === 0 && cfg.workers)
     cfg.workers.doReadToEarn = false;
@@ -165,6 +181,7 @@ async function runAccount(options = {}) {
   const started = Date.now();
   let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
   let appAuthRejected = false, appCheckInAttempted = false;
+  let verifiedTasks = taskStatus.tasks(), readingPoints = 0, readingUncertain = false;
   function persist(code, signal) {
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
@@ -175,6 +192,9 @@ async function runAccount(options = {}) {
       result.errorCode = stopped || result.errorCode || (code !== 0 || signal ? 'PROCESS_FAILED' : 'NO_FINAL_RESULT');
     }
     result.durationSeconds = Math.round((Date.now() - started) / 1000);
+    result.tasks = verifiedTasks;
+    result.readingPoints = readingPoints === 30 ? 30 :
+      readingUncertain || stopped || code !== 0 || signal ? null : readingPoints;
     result.diagnostic = diagnostic;
     if (source.RUN_MODE === 'app-test') result.appCheckInVerified = appCheckInVerified;
     if (source.RUN_MODE === 'app-auth-probe') result.appAuthVerified = appAuthVerified;
@@ -216,7 +236,7 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
+  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
@@ -236,8 +256,23 @@ async function runAccount(options = {}) {
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
+      for (const marker of ['DAILY_TASK_VERIFICATION ', 'DAILY_READING_CREDIT ']) {
+        const position = line.indexOf(marker);
+        if (position < 0) continue;
+        try {
+          const event = JSON.parse(line.slice(position + marker.length));
+          if (event.date !== source.RUN_DATE) continue;
+          if (marker === 'DAILY_TASK_VERIFICATION ') verifiedTasks = taskStatus.merge(verifiedTasks, event.tasks);
+          else if (Number.isSafeInteger(event.points) && event.points >= readingPoints && event.points <= 30)
+            readingPoints = event.points;
+        } catch {}
+      }
+      if (line.includes('[READ-TO-EARN]') && line.includes('Error during Read to Earn')) readingUncertain = true;
       if (line.includes('[APP-AUTH-PROBE] Stable read confirmed') && line.includes('successfulReads=2')) appAuthVerified = true;
-      if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) appCheckInVerified = true;
+      if (line.includes('[DAILY-CHECK-IN]') && line.includes('Recorded verified completion marker')) {
+        appCheckInVerified = true;
+        verifiedTasks.appCheckIn = 'complete';
+      }
       if (line.includes('[DAILY-CHECK-IN]') && line.includes('Starting Daily Check-In')) appCheckInAttempted = true;
       if (/\[(GET-APP-DASHBOARD-DATA|GET-APP-EARNABLE-POINTS|DAILY-CHECK-IN)\]/.test(line) && /status code 401/.test(line)) appAuthRejected = true;
       const marker = 'RECOVERY_ACCOUNT_RESULT ';
@@ -289,18 +324,22 @@ function accountMessage(r, email, url) {
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
   const lines = [
     '🏆 <b>MICROSOFT REWARDS</b>',
-    `<b>${process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
+    `<b>${process.env.RUN_MODE === 'reconcile' ? 'Kiểm tra và chạy bù · ' : process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
     `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
     `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
     `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
-    `🔥 <b>Daily Set:</b> ${dailyText}`,
-    `📱 <b>App check-in:</b> ${{verified:'Máy chủ xác nhận',auth_rejected:'Chưa thực hiện · API từ chối 401',unverified:'Đã gửi · Chưa xác minh',not_requested:'Không được yêu cầu'}[r.appCheckIn] || 'Chưa xác minh'}`,
-    `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`,
+    ...(r.tasks ? taskStatus.lines(r.tasks) : [
+      `🔥 <b>Daily Set:</b> ${dailyText}`,
+      `📱 <b>App check-in:</b> ${{verified:'Máy chủ xác nhận',auth_rejected:'Chưa thực hiện · API từ chối 401',unverified:'Đã gửi · Chưa xác minh',not_requested:'Không được yêu cầu'}[r.appCheckIn] || 'Chưa xác minh'}`,
+      '📰 <b>Read to Earn:</b> Chưa xác minh',
+      `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`
+    ]),
     `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
   ];
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
+  if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {
     lines.push(`📍 <b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
     if (r.diagnostic.errors.length) lines.push(`🛠️ <b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
@@ -333,7 +372,8 @@ async function prepareReport() {
     searchQuota: 'unknown', errorCode: process.env.JOB_STATUS === 'cancelled' ? 'CANCELLED' : 'SETUP_FAILED'};
   // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
-    initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn};
+    initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn,
+    tasks: r.tasks, readingPoints: r.readingPoints};
   await require('./rewards-state.cjs').savePrivateReport(output);
   await require('./rewards-operations.cjs').enqueue(`account-${id}`,
     accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
@@ -351,13 +391,14 @@ function summaryMessage(jobs, env = process.env) {
   };
   const points = sum('pointsEarned'), initial = sum('initialBalance'), final = sum('finalBalance');
   const completed = rows.filter(({r}) => r?.status === 'completed').length;
-  const lines = ['🏆 <b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'retry' ? '🔁 <b>Tổng kết lượt dự phòng</b>' : '📊 <b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
+  const lines = ['🏆 <b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'reconcile' ? '🔍 <b>Tổng kết kiểm tra và chạy bù</b>' : env.RUN_MODE === 'retry' ? '🔁 <b>Tổng kết lượt dự phòng</b>' : '📊 <b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
     `💎 <b>Điểm ghi nhận:</b> ${points.n ? gain(points.total) : 'Chưa xác minh'} (${points.n}/6 tài khoản có số liệu)`,
     `✅ <b>Kết thúc thành công:</b> ${completed}/6`,
     `💰 <b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
     lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
+    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks));
   }
   if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
   lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',

@@ -46,7 +46,7 @@ jobs:
           quietBuild(process.env,[
             ['Dependencies','npm',['ci','--include=dev']],
             ['Build','npm',['run','build']],
-            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs','scripts/main/appReading.test.cjs']]
+            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs','scripts/main/appReading.test.cjs','scripts/main/dailyTasks.test.cjs']]
           ]).catch(()=>{console.error('Protected verification failed; details remain private.');process.exitCode=1;});
           NODE
       - name: Preserve private verification details

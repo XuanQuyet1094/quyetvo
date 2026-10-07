@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const taskStatus = require('./rewards-tasks.cjs');
 function privateRepository() {
   const value = process.env.REWARDS_PRIVATE_REPO || '';
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
@@ -65,7 +66,7 @@ function context() {
   const date = process.env.RUN_DATE;
   const slot = Number(process.env.ACCOUNT_SLOT);
   const mode = process.env.RUN_MODE;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','diagnostic','test','app-test','app-auth-probe','app-read-test'].includes(mode)) throw new Error('Invalid state context');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || ![1,2,3,4,5,6].includes(slot) || !['morning','retry','reconcile','diagnostic','test','app-test','app-auth-probe','app-read-test'].includes(mode)) throw new Error('Invalid state context');
   return {date, slot, mode, file: `/contents/state/${date}/account-${slot}.json`};
 }
 async function get(ctx) {
@@ -105,6 +106,11 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
+  if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(state).some(entry =>
+      entry && typeof entry === 'object' && (entry.status === 'running' ||
+      [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label)))))) {
+    output('run', 'false'); console.log('Skipped: an attempt is active, blocked, or already reserved.'); return;
+  }
   const probe = state['app-auth-probe'];
   const appReadObserved = probe?.authVerified === true || (probe?.history || []).some(entry => entry.authVerified === true);
   if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
@@ -123,7 +129,7 @@ async function claim() {
     output('run', 'false'); console.log('Skipped: no eligible new attempt for this account today.'); return;
   }
   let readingPointsBudget;
-  if (['morning', 'retry', 'app-read-test'].includes(ctx.mode)) {
+  if (['morning', 'retry', 'reconcile', 'app-read-test'].includes(ctx.mode)) {
     let credited = 0;
     let receiptsUnavailable = false;
     const readingState = state['app-read-test'];
@@ -142,11 +148,26 @@ async function claim() {
         { if (ctx.mode === 'app-read-test') throw new Error('Reading receipts unverified'); receiptsUnavailable = true; break; }
       credited += report.pointsEarned;
     }
+    // Ordinary runs can include other points. Only dedicated reading receipts count.
+    for (const mode of ['morning', 'retry', 'reconcile']) {
+      const entry = state[mode];
+      if (!entry || !/^\d+$/.test(entry.runId || '') || !/^\d+$/.test(entry.runAttempt || '')) continue;
+      const file = await api('/contents/reports/' + ctx.date + '/run-' + entry.runId + '-attempt-' + entry.runAttempt + '/account-' + ctx.slot + '.json?ref=' + BRANCH, {}, true);
+      if (!file) {receiptsUnavailable = true; break;}
+      const report = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+      if (report.date !== ctx.date || report.accountId !== ctx.slot ||
+          !Number.isSafeInteger(report.readingPoints) || report.readingPoints < 0 || report.readingPoints > 30) {
+        receiptsUnavailable = true; break;
+      }
+      credited += report.readingPoints;
+    }
+    if (credited === 30) receiptsUnavailable = false;
+    else if (credited > 30) receiptsUnavailable = true;
     readingPointsBudget = receiptsUnavailable ? 0 : Math.max(0, 30 - credited);
     if (!readingPointsBudget && ctx.mode === 'app-read-test') { output('run', 'false'); console.log('Skipped: reading credit target already satisfied.'); return; }
     const folder = path.join(process.env.RUNNER_TEMP || path.dirname(process.env.GITHUB_OUTPUT), 'rewards-private');
     fs.mkdirSync(folder, {recursive: true, mode: 0o700});
-    fs.writeFileSync(path.join(folder, 'reading-budget.json'), JSON.stringify({date:ctx.date, accountId:ctx.slot, points:readingPointsBudget}), {mode:0o600});
+    fs.writeFileSync(path.join(folder, 'reading-budget.json'), JSON.stringify({date:ctx.date, accountId:ctx.slot, points:readingPointsBudget, verified:!receiptsUnavailable}), {mode:0o600});
   }
 
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
@@ -204,6 +225,7 @@ async function finish() {
   try { await uploadPrivateLog(ctx, 'setup'); }
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
   state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), ...(setupLogPath ? {setupLogPath} : {}), finishedAt: new Date().toISOString()};
+  if (result.tasks) state[ctx.mode].tasks = taskStatus.tasks(result.tasks);
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }
@@ -230,7 +252,8 @@ function safeReport(value, slot, date) {
     pointsEarned: metric(value.pointsEarned),
     initialBalance: metric(value.initialBalance, true),
     finalBalance: metric(value.finalBalance, true),
-    errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null};
+    errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null,
+    tasks: taskStatus.tasks(value.tasks), readingPoints: metric(value.readingPoints,true)};
 }
 async function requirePrivateReports() {
   if ((await api('')).private !== true) throw new Error('Reports repository must be private');

@@ -19,8 +19,9 @@ on:
         default: false
   schedule:
     - cron: '17 19 * * *' # 02:17 Vietnam
-    - cron: '37 5 * * *' # 12:37 Vietnam: retry technical failures only
+    - cron: '37 5 * * *' # 12:37 Vietnam: technical failures / daily points below 220
     - cron: '17 11 * * *' # 18:17 Vietnam: verify and repair only confirmed missing tasks
+    - cron: '17 12,13 * * *' # 19:17 / 20:17 Vietnam: backup, same daily reconciliation claim
 
 permissions:
   contents: read
@@ -156,3 +157,4 @@ jobs:
           ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
           ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
         run: node .github/scripts/rewards-runner.cjs summary
+

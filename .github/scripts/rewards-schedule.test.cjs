@@ -11,7 +11,7 @@ test('UTC cron maps to correct Vietnam date and mode', () => {
 });
 test('late scheduled starts are skipped even on the same date', () => {
   assert.equal(planRun(env(MORNING), '2026-10-05T19:17:00Z', at('10:00:00')).run, false);
-  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('16:00:00')).run, false);
+  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('21:01:00')).run, false);
   assert.equal(planRun(env(MORNING), '2026-10-06T16:42:00Z', at('23:42:00')).run, false);
 });
 test('queued run across midnight retains original date and is not started', () => {
@@ -68,3 +68,4 @@ test('late claim performs no private API request and consumes no attempt', async
     fs.rmSync(dir, {recursive: true, force: true});
   }
 });
+

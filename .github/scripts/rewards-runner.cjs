@@ -338,6 +338,8 @@ function accountMessage(r, email, url) {
     ]),
     `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
   ];
+  if (process.env.RUN_MODE === 'morning' && require('./rewards-state.cjs').needsPointsReview(r.pointsEarned))
+    lines.push('🔍 <b>Cần kiểm tra lại:</b> Điểm dưới 220 hoặc chưa xác minh; sẽ được xét lượt dự phòng trong ngày.');
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {
@@ -399,6 +401,8 @@ function summaryMessage(jobs, env = process.env) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
     lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
     if (r?.tasks) lines.push(...taskStatus.lines(r.tasks));
+    if (env.RUN_MODE === 'morning' && r && require('./rewards-state.cjs').needsPointsReview(r.pointsEarned))
+      lines.push('🔍 Cần kiểm tra lại: dưới 220 điểm hoặc chưa đủ số liệu.');
   }
   if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
   lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',
@@ -434,3 +438,4 @@ if (require.main === module) main().catch(() => {
   console.error('Automation step failed. Check setup or Telegram delivery; sensitive details were suppressed.');
   process.exitCode = 1;
 });
+

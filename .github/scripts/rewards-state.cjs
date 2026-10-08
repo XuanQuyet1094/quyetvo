@@ -41,9 +41,42 @@ function retryable(r) {
   if (labels.some(x => blocked.has(x))) return false;
   return transient.has(r.errorCode) || labels.some(x => network.has(x));
 }
+const DAILY_POINTS_TARGET = 220;
+function needsPointsReview(points) {
+  return !Number.isSafeInteger(points) || points < DAILY_POINTS_TARGET;
+}
+function hasBlockedAttempt(state) {
+  return Object.values(state || {}).some(entry => entry && typeof entry === 'object' &&
+    (entry.status === 'running' || [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label))));
+}
 function eligible(state, date, slot) {
   return Boolean(state && state.schema === 1 && state.date === date && state.accountId === slot &&
-    state.morning?.status === 'failed' && state.morning.retryable === true && !state.retry);
+    !hasBlockedAttempt(state) && !state.retry &&
+    ((state.morning?.status === 'failed' && state.morning.retryable === true) ||
+     (state.morning?.status === 'completed' && needsPointsReview(state.dailyReview?.pointsEarned))));
+}
+async function dailyPointsReview(state, ctx) {
+  // Read immutable, same-day private receipts. Never count an attempt twice.
+  let total = 0, known = true, count = 0;
+  const seen = new Set();
+  for (const mode of ['morning', 'retry', 'reconcile', 'test', 'app-test', 'app-read-test']) {
+    const current = state[mode];
+    for (const entry of [...(current?.history || []), ...(current ? [current] : [])]) {
+      if (!entry.finishedAt || !/^\d+$/.test(entry.runId || '') || !/^\d+$/.test(entry.runAttempt || '')) continue;
+      const key = entry.runId + '/' + entry.runAttempt;
+      if (seen.has(key)) continue;
+      seen.add(key); count++;
+      const file = await api('/contents/reports/' + ctx.date + '/run-' + entry.runId + '-attempt-' + entry.runAttempt + '/account-' + ctx.slot + '.json?ref=' + BRANCH, {}, true);
+      const report = file ? JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')) : null;
+      if (!report || report.date !== ctx.date || report.accountId !== ctx.slot ||
+          !Number.isSafeInteger(report.pointsEarned) || !Number.isSafeInteger(report.initialBalance) ||
+          !Number.isSafeInteger(report.finalBalance) || report.initialBalance < 0 || report.finalBalance < 0 ||
+          report.finalBalance - report.initialBalance !== report.pointsEarned) { known = false; continue; }
+      total += report.pointsEarned;
+    }
+  }
+  const pointsEarned = known && count && Number.isSafeInteger(total) ? total : null;
+  return {target: DAILY_POINTS_TARGET, pointsEarned, needsReview: needsPointsReview(pointsEarned)};
 }
 function stateResult(r) {
   const result = {status: ['completed', 'failed', 'needs_action'].includes(r.status) ? r.status : 'failed',
@@ -106,6 +139,9 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
+  if (['retry', 'reconcile'].includes(ctx.mode)) {
+    state.dailyReview = await dailyPointsReview(state, ctx);
+  }
   if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(state).some(entry =>
       entry && typeof entry === 'object' && (entry.status === 'running' ||
       [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label)))))) {
@@ -284,7 +320,7 @@ async function readPrivateReports(jobs) {
   return result;
 }
 
-module.exports = {retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
+module.exports = {DAILY_POINTS_TARGET, needsPointsReview, dailyPointsReview, retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
   api, requirePrivateReports, reportContext};
 if (require.main === module) {
   const task = process.argv[2] === 'claim' ? claim :
@@ -303,3 +339,4 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 }
+

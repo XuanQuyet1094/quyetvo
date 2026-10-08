@@ -1,0 +1,44 @@
+name: Reconcile accounts 1, 2, 4 on 2026-10-08
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/reconcile-2026-10-08.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+
+jobs:
+  account_1:
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      run_mode: reconcile
+      run_date: '2026-10-08'
+      late_reconcile_date: '2026-10-08'
+    secrets: inherit
+  account_2:
+    needs: account_1
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 2
+      run_mode: reconcile
+      run_date: '2026-10-08'
+      late_reconcile_date: '2026-10-08'
+    secrets: inherit
+  account_4:
+    needs: account_2
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 4
+      run_mode: reconcile
+      run_date: '2026-10-08'
+      late_reconcile_date: '2026-10-08'
+    secrets: inherit

@@ -46,3 +46,16 @@ test('delayed noon retry and evening backups retain same-day deadline',()=>{
     assert.equal(schedule.planRun({GITHUB_EVENT_NAME:'schedule',EVENT_SCHEDULE:schedule.RECONCILE_BACKUP},'2026-10-08T11:17:00Z',at(time)).run,true);
   assert.equal(schedule.planRun({GITHUB_EVENT_NAME:'schedule',EVENT_SCHEDULE:schedule.RECONCILE},'2026-10-08T11:17:00Z',at('22:11:00')).run,false);
 });
+test('one-off late reconciliation expires on Oct 8 and applies only to selected accounts',()=>{
+  const at=time=>Date.parse('2026-10-08T'+time+'+07:00');
+  for(const slot of [1,2,4]) {
+    const env={LATE_RECONCILE_DATE:'2026-10-08',ACCOUNT_SLOT:String(slot)};
+    assert.equal(schedule.canStart('2026-10-08',at('23:00:00'),'reconcile',env),true);
+    assert.equal(schedule.deadline('2026-10-08','reconcile',env),at('23:59:30'));
+    assert.equal(schedule.canStart('2026-10-08',at('23:50:00'),'reconcile',env),false);
+    assert.equal(schedule.canStart('2026-10-08',Date.parse('2026-10-09T00:00:00+07:00'),'reconcile',env),false);
+    assert.equal(schedule.lateReconcile('2026-10-09','reconcile',env),false);
+    assert.equal(schedule.lateReconcile('2026-10-08','morning',env),false);
+  }
+  for(const slot of [3,5,6]) assert.equal(schedule.canStart('2026-10-08',at('23:00:00'),'reconcile',{LATE_RECONCILE_DATE:'2026-10-08',ACCOUNT_SLOT:String(slot)}),false);
+});

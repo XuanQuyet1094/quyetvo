@@ -212,7 +212,7 @@ async function runAccount(options = {}) {
   }
   let remaining = Infinity;
   if (source.RUN_DATE) {
-    remaining = schedule.deadline(source.RUN_DATE, source.RUN_MODE) - started;
+    remaining = schedule.deadline(source.RUN_DATE, source.RUN_MODE, source) - started;
     if (source.RUN_DATE !== schedule.dateVN(started) || remaining <= 0) {
       stopped = 'DAILY_WINDOW_EXPIRED';
       persist(1, null);
@@ -236,7 +236,7 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
+  const accountLimit = options.timeoutMs ?? (schedule.lateReconcile(source.RUN_DATE, source.RUN_MODE, source) ? 15 : source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);

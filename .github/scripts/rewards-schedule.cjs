@@ -5,12 +5,15 @@ const RETRY = '37 5 * * *'; // 12:37 Vietnam
 const RECONCILE = '17 11 * * *'; // 18:17 Vietnam
 const RECONCILE_BACKUP = '17 12,13 * * *'; // 19:17 / 20:17 Vietnam, same one-per-day claim
 const dateVN = ms => new Date(ms + 7 * 3600000).toISOString().slice(0, 10);
-function deadline(date, mode) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
-  return Date.parse(date + (mode === 'app-read-test' ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
+function lateReconcile(date, mode, env = process.env) {
+  return date === '2026-10-08' && env.LATE_RECONCILE_DATE === date && mode === 'reconcile' && [1,2,4].includes(Number(env.ACCOUNT_SLOT));
 }
-function canStart(date, now = Date.now(), mode) {
-  return date === dateVN(now) && deadline(date, mode) - now >= (mode === 'app-read-test' ? 5 : mode === 'reconcile' ? 20 : 90) * 60000;
+function deadline(date, mode, env = process.env) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
+  return Date.parse(date + (mode === 'app-read-test' || lateReconcile(date, mode, env) ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
+}
+function canStart(date, now = Date.now(), mode, env = process.env) {
+  return date === dateVN(now) && deadline(date, mode, env) - now >= (lateReconcile(date, mode, env) ? 10 : mode === 'app-read-test' ? 5 : mode === 'reconcile' ? 20 : 90) * 60000;
 }
 function planRun(env, createdAt, now = Date.now()) {
   const created = Date.parse(createdAt);
@@ -38,7 +41,7 @@ async function plan(env = process.env, fetchFn = fetch, now = Date.now()) {
   fs.appendFileSync(env.GITHUB_OUTPUT, 'date=' + result.date + '\nmode=' + result.mode + '\nrun=' + result.run + '\n');
   console.log(result.run ? 'Run is within the Vietnam execution window.' : 'Skipped: original run date or execution window has expired.');
 }
-module.exports = {MORNING, RETRY, RECONCILE, RECONCILE_BACKUP, dateVN, deadline, canStart, planRun, plan};
+module.exports = {MORNING, RETRY, RECONCILE, RECONCILE_BACKUP, dateVN, deadline, canStart, lateReconcile, planRun, plan};
 if (require.main === module) {
   if (process.argv[2] === 'plan') plan().catch(() => {console.error('Schedule validation failed.'); process.exitCode = 1;});
   else if (process.argv[2] === 'window') {

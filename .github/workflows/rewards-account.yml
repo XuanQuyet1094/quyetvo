@@ -15,6 +15,9 @@ on:
       debug_daily_set:
         type: boolean
         default: false
+      late_reconcile_date:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -31,6 +34,7 @@ jobs:
       RUN_MODE: ${{ inputs.run_mode }}
       RUN_DATE: ${{ inputs.run_date }}
       ACCOUNT_SLOT: ${{ inputs.account }}
+      LATE_RECONCILE_DATE: ${{ inputs.late_reconcile_date }}
       BOT_DIR: ${{ github.workspace }}/bot
       REPORT_PATH: ${{ github.workspace }}/rewards-result.json
       DEBUG_DAILY_SET: ${{ inputs.debug_daily_set && 'true' || 'false' }}
@@ -192,3 +196,4 @@ jobs:
       - name: Preserve bot failure status
         if: ${{ !cancelled() && steps.bot.outcome == 'failure' }}
         run: exit 1
+

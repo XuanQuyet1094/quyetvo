@@ -6,7 +6,8 @@ const RECONCILE = '17 11 * * *'; // 18:17 Vietnam
 const RECONCILE_BACKUP = '17 12,13 * * *'; // 19:17 / 20:17 Vietnam, same one-per-day claim
 const dateVN = ms => new Date(ms + 7 * 3600000).toISOString().slice(0, 10);
 function lateReconcile(date, mode, env = process.env) {
-  return date === '2026-10-08' && env.LATE_RECONCILE_DATE === date && mode === 'reconcile' && [1,2,4].includes(Number(env.ACCOUNT_SLOT));
+  return date === '2026-10-08' && env.LATE_RECONCILE_DATE === date &&
+    ((mode === 'reconcile' && [1,2,4].includes(Number(env.ACCOUNT_SLOT))) || (mode === 'test' && Number(env.ACCOUNT_SLOT) === 1));
 }
 function deadline(date, mode, env = process.env) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');

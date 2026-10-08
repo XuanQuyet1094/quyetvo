@@ -58,4 +58,6 @@ test('one-off late reconciliation expires on Oct 8 and applies only to selected 
     assert.equal(schedule.lateReconcile('2026-10-08','morning',env),false);
   }
   for(const slot of [3,5,6]) assert.equal(schedule.canStart('2026-10-08',at('23:00:00'),'reconcile',{LATE_RECONCILE_DATE:'2026-10-08',ACCOUNT_SLOT:String(slot)}),false);
+  assert.equal(schedule.canStart('2026-10-08',at('23:40:00'),'test',{LATE_RECONCILE_DATE:'2026-10-08',ACCOUNT_SLOT:'1'}),true);
+  assert.equal(schedule.canStart('2026-10-08',at('23:40:00'),'test',{LATE_RECONCILE_DATE:'2026-10-08',ACCOUNT_SLOT:'2'}),false);
 });

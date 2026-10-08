@@ -1,0 +1,20 @@
+name: Repair account 1 Daily Set on 2026-10-08
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/daily-set-repair-2026-10-08.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+jobs:
+  account_1:
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      run_mode: test
+      run_date: '2026-10-08'
+      late_reconcile_date: '2026-10-08'
+    secrets: inherit

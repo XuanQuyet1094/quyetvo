@@ -152,14 +152,21 @@ function configure(diagnosticOnly = false) {
     cfg.ensureStreakProtection = false;
     cfg.autoClaimPunchcardRewards = false;
     for (const key of Object.keys(cfg.workers || {})) cfg.workers[key] = false;
-    // Acquire fresh App data; the source enables only tasks proven missing.
+    // Fresh data selects missing tasks; unknown search quotas use a bounded probe.
     cfg.workers.doDailySet = true;
     cfg.workers.doDailyCheckIn = true;
     cfg.workers.doReadToEarn = true;
+    cfg.workers.doMobileSearch = true;
+    cfg.workers.doDesktopSearch = true;
     for (const key of Object.keys(cfg.activities || {})) cfg.activities[key] = false;
     cfg.activities.urlReward = true;
     cfg.activities.searchOnBing = true;
     cfg.searchSettings.parallelSearching = false;
+    cfg.searchSettings.runOnZeroPoints = false;
+    if (cfg.experimental) {
+      cfg.experimental.apiSearch = false;
+      cfg.experimental.apiSearchOnBing = false;
+    }
   }
   if (['test', 'reconcile', 'app-test', 'app-auth-probe', 'app-read-test'].includes(process.env.RUN_MODE) && cfg.experimental) cfg.experimental.edgeBrowsing = false;
   const readingBudget = read(path.join(process.env.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
@@ -340,6 +347,9 @@ function accountMessage(r, email, url) {
   ];
   if (process.env.RUN_MODE === 'morning' && require('./rewards-state.cjs').needsPointsReview(r.pointsEarned))
     lines.push('🔍 <b>Cần kiểm tra lại:</b> Điểm dưới 220 hoặc chưa xác minh; sẽ được xét lượt dự phòng trong ngày.');
+  if (process.env.RUN_MODE === 'reconcile' &&
+      (r.tasks?.mobileSearch === 'unknown' || r.tasks?.desktopSearch === 'unknown' || r.searchQuota === 'unknown'))
+    lines.push('ℹ️ Quota tìm kiếm chưa đọc được. Dừng theo giới hạn không đồng nghĩa đã đủ điểm.');
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {
@@ -438,4 +448,5 @@ if (require.main === module) main().catch(() => {
   console.error('Automation step failed. Check setup or Telegram delivery; sensitive details were suppressed.');
   process.exitCode = 1;
 });
+
 

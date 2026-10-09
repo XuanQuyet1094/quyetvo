@@ -15,15 +15,29 @@ test('task reports retain fixed labels only and preserve same-day confirmed comp
  assert.equal(status.merge(safe,{dailySet:'missing'}).dailySet,'missing');
  assert.ok(status.lines(safe).join(' ').includes('Read to Earn'));
 });
-test('repair config disables unrelated activity and Edge background waiting',()=>{
+test('repair enables sequential desktop/mobile searches but disables unrelated activity and zero-quota farming',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'repair-config-'));
  try{
- fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doDailySet:true,doReadToEarn:true,doDailyCheckIn:true,doMobileSearch:true,doBonusSearches:true,doMorePromotions:true},activities:{urlReward:true,searchOnBing:true},searchSettings:{parallelSearching:true},experimental:{edgeBrowsing:true}}));
+ fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doDailySet:true,doReadToEarn:true,doDailyCheckIn:true,doMobileSearch:true,doDesktopSearch:false,doBonusSearches:true,doMorePromotions:true},activities:{urlReward:true,searchOnBing:true},searchSettings:{parallelSearching:true,runOnZeroPoints:true},experimental:{edgeBrowsing:true,apiSearch:true,apiSearchOnBing:true}}));
  const result=spawnSync(process.execPath,[path.join(__dirname,'rewards-runner.cjs'),'configure'],{encoding:'utf8',env:{...process.env,BOT_DIR:dir,RUNNER_TEMP:dir,ACCOUNT_SLOT:'2',RUN_MODE:'reconcile'}});
  assert.equal(result.status,0);const cfg=JSON.parse(fs.readFileSync(path.join(dir,'config.json')));
- assert.equal(cfg.experimental.edgeBrowsing,false);assert.equal(cfg.workers.doBonusSearches,false);assert.equal(cfg.workers.doMorePromotions,false);assert.equal(cfg.workers.doMobileSearch,false);
+ assert.equal(cfg.experimental.edgeBrowsing,false);assert.equal(cfg.workers.doBonusSearches,false);assert.equal(cfg.workers.doMorePromotions,false);assert.equal(cfg.workers.doMobileSearch,true);assert.equal(cfg.workers.doDesktopSearch,true);
  assert.equal(cfg.workers.doDailyCheckIn,true);assert.equal(cfg.searchSettings.parallelSearching,false);
+ assert.equal(cfg.searchSettings.runOnZeroPoints,false);
+ assert.equal(cfg.experimental.apiSearch,false);assert.equal(cfg.experimental.apiSearchOnBing,false);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+test('Telegram repair separates platform status and never promotes an unknown quota to completion',()=>{
+ const previous=process.env.RUN_MODE;process.env.RUN_MODE='reconcile';
+ try{
+ const {accountMessage}=require('./rewards-runner.cjs');
+ const message=accountMessage({accountId:1,status:'completed',date:'2026-10-09',pointsEarned:3,
+  initialBalance:100,finalBalance:103,searchQuota:'unknown',
+  tasks:{dailySet:'complete',appCheckIn:'complete',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'missing'}},'fixture@example.invalid','https://example.invalid');
+ assert.ok(message.includes('Điện thoại ❔ Chưa xác minh'));
+ assert.ok(message.includes('Máy tính ⚠️ Còn thiếu'));
+ assert.ok(message.includes('không đồng nghĩa đã đủ điểm'));
+ }finally{if(previous===undefined)delete process.env.RUN_MODE;else process.env.RUN_MODE=previous;}
 });
 test('repair reserves one attempt per day, blocks running/auth failures and subtracts only reading receipts',async t=>{
  t.mock.method(Date,'now',()=>Date.parse('2026-10-07T18:17:00+07:00'));
@@ -47,3 +61,4 @@ test('repair reserves one attempt per day, blocks running/auth failures and subt
  assert.equal(budget.points,0);assert.equal(budget.verified,false);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
+

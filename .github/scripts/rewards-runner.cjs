@@ -141,9 +141,8 @@ function configure(diagnosticOnly = false) {
       cfg.experimental.apiSearchOnBing=false;
       cfg.experimental.edgeBrowsing=false;
     }
-    const budget=read(path.join(process.env.RUNNER_TEMP,'rewards-private','search-budget.json'));
-    if(budget?.date===process.env.RUN_DATE && budget?.accountId===Number(process.env.ACCOUNT_SLOT))
-      for(const p of searchLedger.platforms) if(searchLedger.complete(budget.progress,p)) cfg.workers[p==='mobile'?'doMobileSearch':'doDesktopSearch']=false;
+    // Keep configured search workers available until the bot reads Microsoft quota.
+    // Observed balance receipts alone cannot disable a platform at a fixed goal.
   }
   if (diagnosticOnly) {
     cfg.ensureStreakProtection = false;
@@ -173,7 +172,7 @@ function configure(diagnosticOnly = false) {
     cfg.ensureStreakProtection = false;
     cfg.autoClaimPunchcardRewards = false;
     for (const key of Object.keys(cfg.workers || {})) cfg.workers[key] = false;
-    // Fresh data selects missing tasks; unknown search quotas use a bounded probe.
+    // Fresh quota selects missing searches; unverified repair quota cannot authorize queries.
     cfg.workers.doDailySet = true;
     cfg.workers.doDailyCheckIn = true;
     cfg.workers.doReadToEarn = true;

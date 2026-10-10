@@ -1,6 +1,20 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const evidence=require('./rewards-search-evidence.cjs');
+test('morning and retry keep search enabled until Microsoft quota is read, even with full historical receipts',()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawnSync}=require('node:child_process');
+ for(const mode of ['morning','retry','reconcile']) {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'quota-config-'));
+  try {
+   fs.mkdirSync(path.join(dir,'rewards-private'));
+   fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doMobileSearch:true,doDesktopSearch:true},searchSettings:{},activities:{},experimental:{}}));
+   fs.writeFileSync(path.join(dir,'rewards-private/search-budget.json'),JSON.stringify({schema:1,date:'2026-10-10',accountId:1,progress:{mobile:{points:60,verified:true},desktop:{points:90,verified:true}}}));
+   const run=spawnSync(process.execPath,[path.join(__dirname,'rewards-runner.cjs'),'configure'],{encoding:'utf8',env:{...process.env,BOT_DIR:dir,RUNNER_TEMP:dir,ACCOUNT_SLOT:'1',RUN_DATE:'2026-10-10',RUN_MODE:mode}});
+   assert.equal(run.status,0);const cfg=JSON.parse(fs.readFileSync(path.join(dir,'config.json')));
+   assert.equal(cfg.workers.doMobileSearch,true);assert.equal(cfg.workers.doDesktopSearch,true);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+ }
+});
 test('six-account summary with pending mixed rewards fits the Telegram notification limit',()=>{
  const runner=require('./rewards-runner.cjs'),jobs={},env={RUN_MODE:'morning',RUN_DATE:'2026-10-10',RUN_URL:'https://github.com/example/public/actions/runs/123'};
  for(let id=1;id<=6;id++) {

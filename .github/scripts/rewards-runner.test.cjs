@@ -138,3 +138,24 @@ test('ambiguous reading errors never certify zero credit for a later repeat',asy
  console.log('RECOVERY_ACCOUNT_RESULT '+JSON.stringify(${JSON.stringify(fixture)}));`);
  assert.equal(r.result.readingPoints,null);
 });
+test('private timing and quota reports reject other dates and accounts, remove raw data, and retain the last confirmed quota',async t=>{
+ const date='2026-10-10';t.mock.method(Date,'now',()=>Date.parse(date+'T12:00:00Z'));
+ const diagnostic={checkedAt:date+'T12:00:00.000Z',reason:'boundary',api:{mobile:{entries:1,token:'PRIVATE-DATA'}},ui:{attempted:true,outcome:'parsed',labels:{mobile:1},ratios:[{earned:30,max:30,text:'PRIVATE-DATA'}],text:'PRIVATE-DATA'}};
+ const events=[
+  ['REWARDS_STAGE_TIMING ',{id:1,stage:'login',phase:'start'}],
+  ['REWARDS_STAGE_TIMING ',{id:1,stage:'login',phase:'end',durationMs:2000,status:'ok'}],
+  ['REWARDS_STAGE_TIMING ',{id:2,stage:'desktop_search',phase:'start',accountId:1}],
+  ['REWARDS_STAGE_TIMING ',{id:2,stage:'desktop_search',phase:'end',durationMs:5000,status:'ok',accountId:1}],
+  ['SEARCH_QUOTA_EVIDENCE ',{mobile:{earned:30,max:30,source:'api'},diagnostic}],
+  ['SEARCH_QUOTA_EVIDENCE ',{mobile:{earned:0,max:30,source:'api'},date:'2000-01-01'}],
+  ['SEARCH_QUOTA_EVIDENCE ',{mobile:null,desktop:null,diagnostic:{...diagnostic,reason:'final'}}]
+ ].map(([marker,event])=>`console.log(${JSON.stringify(marker)}+JSON.stringify(${JSON.stringify({schema:1,date,accountId:2,...event})}));`).join('\n');
+ const r=await fakeBot(events+`console.log('RECOVERY_ACCOUNT_RESULT '+JSON.stringify(${JSON.stringify({...fixture,date})}));`,{env:{RUN_DATE:date}});
+ assert.deepEqual(r.result.timings,[{stage:'login',durationMs:2000,calls:1,failed:0,interrupted:false}]);
+ assert.equal(r.result.searchEvidence.mobile.earned,30);assert.equal(r.result.tasks.mobileSearch,'complete');
+ assert.equal(r.result.completion.status,'unverified');assert.equal(r.result.quotaDiagnostics.length,2);
+ const safe=require('./rewards-state.cjs').safeReport(r.result,2,date);
+ assert.deepEqual(safe.timings,r.result.timings);assert.deepEqual(safe.quotaDiagnostics,r.result.quotaDiagnostics);
+ assert.ok(!JSON.stringify(safe).includes('PRIVATE-DATA'));
+ assert.ok(!api.accountMessage(r.result,'fixture@example.invalid','https://example.invalid').includes('PRIVATE-DATA'));
+});

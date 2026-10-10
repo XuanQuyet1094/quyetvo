@@ -3,12 +3,17 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {eligible, needsPointsReview, dailyPointsReview} = require('./rewards-state.cjs');
 const schedule = require('./rewards-schedule.cjs');
-test('completed accounts below 220 qualify once; 220 is not below target', () => {
+test('220 is a warning only; missing or unverified tasks qualify once regardless of points', () => {
   const state = {schema:1,date:'2026-10-08',accountId:1,morning:{status:'completed'},dailyReview:{pointsEarned:150}};
   for (const points of [0,128,150,198,219,null])
     assert.equal(eligible({...state,dailyReview:{pointsEarned:points}},state.date,1),true);
   for (const points of [220,231,392])
-    assert.equal(eligible({...state,dailyReview:{pointsEarned:points}},state.date,1),false);
+    assert.equal(eligible({...state,dailyReview:{pointsEarned:points}},state.date,1),true);
+  const complete=Object.fromEntries(require('./rewards-tasks.cjs').keys.map(k=>[k,'complete']));
+  for(const points of [128,150,219,220,null]) {
+    assert.equal(eligible({...state,morning:{status:'completed',tasks:complete},dailyReview:{pointsEarned:points}},state.date,1),false);
+    assert.equal(needsPointsReview(points),points!==220);
+  }
   assert.equal(eligible({...state,retry:{status:'completed'}},state.date,1),false);
   assert.equal(eligible({...state,reconcile:{status:'running'}},state.date,1),false);
   assert.equal(eligible({...state,morning:{status:'completed',diagnostic:{errors:['TOTP_REJECTED']}}},state.date,1),false);

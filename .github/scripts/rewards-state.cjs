@@ -50,13 +50,21 @@ function hasBlockedAttempt(state) {
   return Object.values(state || {}).some(entry => entry && typeof entry === 'object' &&
     (entry.status === 'running' || [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label))));
 }
+function dailyTaskReview(state) {
+  const entries=Object.entries(state||{}).filter(([mode,e])=>['morning','retry','reconcile','test','app-test','app-read-test'].includes(mode)&&e&&e.status!=='running')
+    .map(([mode,e])=>({mode,e})).sort((a,b)=>String(a.e.finishedAt||'').localeCompare(String(b.e.finishedAt||'')));
+  let value=taskStatus.tasks();
+  for(const {e} of entries) {
+    value=taskStatus.merge(value,e.tasks);
+    if(e.searchEvidence)value=require('./rewards-search-evidence.cjs').applyTasks(value,e.searchEvidence);
+  }
+  return {tasks:value,...taskStatus.completion(value)};
+}
 function eligible(state, date, slot) {
   return Boolean(state && state.schema === 1 && state.date === date && state.accountId === slot &&
     !hasBlockedAttempt(state) && !state.retry &&
     ((state.morning?.status === 'failed' && state.morning.retryable === true) ||
-     (state.morning?.status === 'completed' && (needsPointsReview(state.dailyReview?.pointsEarned) ||
-       Object.values(taskStatus.tasks(state.morning.tasks)).includes('missing') ||
-       (state.searchReview && searchLedger.needsReview(state.searchReview,state.morning.tasks))))));
+     (state.morning?.status === 'completed' && ['incomplete','unverified'].includes(dailyTaskReview(state).status))));
 }
 async function dailySearchReview(state,ctx) {
   return searchLedger.review(state,ctx,async entry=>{
@@ -283,6 +291,10 @@ async function finish() {
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
   state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), ...(setupLogPath ? {setupLogPath} : {}), finishedAt: new Date().toISOString()};
   if (result.tasks) state[ctx.mode].tasks = taskStatus.tasks(result.tasks);
+  state[ctx.mode].requiredTasks=taskStatus.completion(result.tasks,result.requiredTasks).required;
+  state[ctx.mode].completion=taskStatus.completion(result.tasks,result.requiredTasks);
+  state[ctx.mode].timings=require('./rewards-performance.cjs').normalize(result.timings);
+  state[ctx.mode].quotaDiagnostics=(Array.isArray(result.quotaDiagnostics)?result.quotaDiagnostics:[]).map(require('./rewards-search-evidence.cjs').diagnostic).filter(Boolean).slice(-40);
   if (result.searchPoints) state[ctx.mode].searchPoints=searchLedger.runPoints(result.searchPoints);
   if (result.dailySearch) state[ctx.mode].dailySearch=searchLedger.progress(result.dailySearch);
   if (result.searchEvidence) state[ctx.mode].searchEvidence=require('./rewards-search-evidence.cjs').normalize(result.searchEvidence);
@@ -313,7 +325,11 @@ function safeReport(value, slot, date) {
     initialBalance: metric(value.initialBalance, true),
     finalBalance: metric(value.finalBalance, true),
     errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null,
-    tasks: taskStatus.tasks(value.tasks), readingPoints: metric(value.readingPoints,true),
+    tasks: taskStatus.tasks(value.tasks), requiredTasks:taskStatus.completion(value.tasks,value.requiredTasks).required,
+    completion:taskStatus.completion(value.tasks,value.requiredTasks),
+    timings:require('./rewards-performance.cjs').normalize(value.timings),
+    quotaDiagnostics:(Array.isArray(value.quotaDiagnostics)?value.quotaDiagnostics:[]).map(require('./rewards-search-evidence.cjs').diagnostic).filter(Boolean).slice(-40),
+    readingPoints: metric(value.readingPoints,true),
     ...(value.searchPoints ? {searchPoints:searchLedger.runPoints(value.searchPoints)} : {}),
     ...(value.dailySearch ? {dailySearch:searchLedger.progress(value.dailySearch)} : {}),
     ...(value.searchEvidence ? {searchEvidence:require('./rewards-search-evidence.cjs').normalize(value.searchEvidence)} : {})};
@@ -347,8 +363,8 @@ async function readPrivateReports(jobs) {
   return result;
 }
 
-module.exports = {DAILY_POINTS_TARGET, needsPointsReview, dailyPointsReview, dailySearchReview, retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
-  api, requirePrivateReports, reportContext};
+module.exports = {DAILY_POINTS_TARGET, needsPointsReview, dailyPointsReview, dailySearchReview, dailyTaskReview, retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
+  api, requirePrivateReports, reportContext, safeReport};
 if (require.main === module) {
   const task = process.argv[2] === 'claim' ? claim :
     process.argv[2] === 'finish' ? finish :
@@ -366,5 +382,3 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 }
-
-

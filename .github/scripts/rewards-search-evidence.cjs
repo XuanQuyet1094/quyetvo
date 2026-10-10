@@ -8,7 +8,20 @@ function normalize(v) {
   return {mobile:quota(v?.mobile),desktop:quota(v?.desktop),shared:quota(v?.shared),
     pending:Object.fromEntries(['total','mobile','desktop','shared'].map(p=>[p,metric(v?.pending?.[p])])),
     pendingBefore:Object.fromEntries(['total','mobile','desktop','shared'].map(p=>[p,metric(v?.pendingBefore?.[p])])),
-    limited:v?.limited===true,claimReceived:metric(v?.claimReceived)};
+    limited:v?.limited===true,claimReceived:metric(v?.claimReceived),diagnostic:diagnostic(v?.diagnostic)};
+}
+const count=v=>Number.isSafeInteger(v)&&v>=0&&v<=10000?v:0;
+const stamp=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)&&Number.isFinite(Date.parse(v))?v:null;
+function diagnostic(v) {
+ if(!v||!stamp(v.checkedAt)||!['poll','boundary','stalled','final','claim'].includes(v.reason))return null;
+ return {checkedAt:stamp(v.checkedAt),reason:v.reason,api:Object.fromEntries(['mobile','desktop'].map(p=>[p,{entries:count(v.api?.[p]?.entries),invalid:count(v.api?.[p]?.invalid),duplicates:count(v.api?.[p]?.duplicates)}])),
+  ui:{attempted:v.ui?.attempted===true,outcome:['parsed','unsupported','ambiguous','unavailable','cached','not_needed'].includes(v.ui?.outcome)?v.ui.outcome:'unavailable',checkedAt:stamp(v.ui?.checkedAt),labels:Object.fromEntries(['mobile','desktop','shared'].map(p=>[p,count(v.ui?.labels?.[p])])),ratios:(Array.isArray(v.ui?.ratios)?v.ui.ratios:[]).filter(x=>metric(x?.earned)!==null&&metric(x?.max)!==null&&x.earned<=10000&&x.max<=10000).slice(0,6).map(x=>({earned:x.earned,max:x.max}))}};
+}
+function merge(previous,next) {
+ const old=normalize(previous),fresh=normalize(next);
+ for(const p of ['mobile','desktop','shared']) if(!fresh[p])fresh[p]=old[p];
+ if(fresh.mobile||fresh.desktop)fresh.shared=null;
+ return fresh;
 }
 function applyTasks(tasks,value) {
   const out={...tasks},e=normalize(value);
@@ -47,4 +60,4 @@ function lines(value,receipts,compact=false) {
   if(!e.mobile || !e.desktop) out.push('ℹ️ Điểm search ghi nhận là phần tăng số dư quan sát được; quota lấy từ Microsoft, không mặc định 60/90.');
   return out;
 }
-module.exports={metric,quota,normalize,applyTasks,lines};
+module.exports={metric,quota,normalize,applyTasks,lines,diagnostic,merge};

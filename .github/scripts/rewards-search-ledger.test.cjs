@@ -41,7 +41,7 @@ test('retry considers remaining tasks/search goals even when total points exceed
  assert.equal(stateApi.eligible({...s,morning:{status:'completed',diagnostic:{errors:['TOTP_REJECTED']}}},s.date,5),false);
  const complete={mobile:{points:60,verified:true},desktop:{points:90,verified:true}};
  assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete'}},searchReview:complete},s.date,5),true);
- assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete',mobileSearch:'complete',desktopSearch:'complete'}}},s.date,5),false);
+ assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete',appCheckIn:'complete',readToEarn:'complete',mobileSearch:'complete',desktopSearch:'complete'}}},s.date,5),false);
 });
 test('Telegram shows independent day counters and goal completion without changing missing Daily Set',()=>{
  const completed=ledger.add(base,{mobile:3,desktop:3});

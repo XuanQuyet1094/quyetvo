@@ -48,7 +48,8 @@ test('Telegram shows independent day counters and goal completion without changi
  const text=runner.accountMessage({accountId:5,date:'2026-10-10',status:'completed',pointsEarned:6,tasks,dailySearch:completed},'fixture@example.invalid','https://example.invalid');
  assert.ok(text.includes('60/60'));assert.ok(text.includes('90/90'));assert.ok(text.includes('Hoàn thành mục tiêu'));assert.ok(text.includes('Daily Set:</b> ⚠️ Còn thiếu'));
  const partial=ledger.lines(base,{mobileSearch:'unknown',desktopSearch:'unknown'}).join('\n');
- assert.ok(partial.includes('57/60'));assert.ok(partial.includes('87/90'));assert.ok(partial.includes('Còn thiếu 3'));
+ assert.ok(partial.includes('57/60'));assert.ok(partial.includes('87/90'));assert.ok(partial.includes('Chưa xác minh hoàn tất quota'));
+ assert.ok(!partial.includes('Còn thiếu 3'));
 });
 test('runner persists partial cumulative search receipts after failure and rejects wrong identity/day or duplicate events',async t=>{
  t.mock.method(Date,'now',()=>Date.parse('2026-10-10T18:17:00+07:00'));
@@ -68,7 +69,7 @@ test('runner persists partial cumulative search receipts after failure and rejec
   const r=JSON.parse(fs.readFileSync(env.REPORT_PATH));
   assert.equal(r.status,'failed');assert.deepEqual(r.searchPoints,{mobile:3,desktop:0});
   assert.equal(r.dailySearch.mobile.points,60);assert.equal(r.dailySearch.desktop.points,87);
-  assert.equal(r.tasks.mobileSearch,'complete');assert.equal(r.tasks.desktopSearch,'missing');
+  assert.equal(r.tasks.mobileSearch,'complete');assert.equal(r.tasks.desktopSearch,'unknown');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('state claim seeds the private budget with legacy credits instead of repeating the entire target',async t=>{
@@ -113,6 +114,16 @@ test('the configured goal and a reliable Microsoft quota are reported separately
  const text=ledger.lines(base,{mobileSearch:'complete',desktopSearch:'unknown'}).join('\n');
  assert.ok(text.includes('Đã ghi nhận 57/60'));
  assert.ok(text.includes('Microsoft xác nhận hết quota'));
- assert.ok(text.includes('Còn thiếu 3 so với mục tiêu'));
+ assert.ok(text.includes('Chưa xác minh hoàn tất quota'));
  assert.equal(ledger.needsReview(base,{mobileSearch:'complete',desktopSearch:'complete'}),false);
+});
+
+test('partial receipts preserve quota uncertainty, genuine native counter evidence and retry eligibility',()=>{
+ assert.deepEqual(ledger.applyTasks({mobileSearch:'unknown',desktopSearch:'unknown'},base),{mobileSearch:'unknown',desktopSearch:'unknown'});
+ assert.deepEqual(ledger.applyTasks({mobileSearch:'complete',desktopSearch:'missing'},base),{mobileSearch:'complete',desktopSearch:'missing'});
+ assert.equal(ledger.applyTasks({},base).mobileSearch,'unknown');
+ assert.equal(ledger.needsReview(base,{mobileSearch:'unknown',desktopSearch:'unknown'}),true);
+ const old=ledger.lines(base,{mobileSearch:'missing',desktopSearch:'missing'}).join('\n');
+ assert.ok(!old.includes('Microsoft xác nhận còn')&&!old.includes('Còn thiếu 3'));
+ assert.ok(old.includes('Chưa xác minh hoàn tất quota'));
 });

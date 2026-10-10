@@ -25,9 +25,10 @@ function needsReview(value,tasks={}) { return platforms.some(p=>tasks[p+'Search'
 function applyTasks(tasks,value) {
   const result={...tasks};
   if(value) for(const p of platforms) {
-    const x=progress(value)[p],key=p+'Search';
+    const key=p+'Search';
     if(complete(value,p)) result[key]='complete';
-    else if(result[key] !== 'complete') result[key]=x.verified ? 'missing' : 'unknown';
+    // A partial receipt total is a lower bound, not proof of outstanding Microsoft quota.
+    else if(!['complete','missing'].includes(result[key])) result[key]='unknown';
   }
   return result;
 }
@@ -39,7 +40,7 @@ function lines(value,tasks={}) {
     const label=p==='mobile'?'📱 <b>Mobile search:</b>':'🖥️ <b>Desktop search:</b>';
     return label+' '+(x.verified?'Đã ghi nhận ':'Ít nhất ')+x.points+'/'+x.target+' điểm · '+
       (done?'✅ Hoàn thành mục tiêu':tasks[p+'Search']==='complete'?'✅ Microsoft xác nhận hết quota':
-        x.verified?'⚠️ Còn thiếu '+(x.target-x.points)+' so với mục tiêu':'❔ Chưa đủ dữ liệu');
+        '❔ Chưa xác minh hoàn tất quota');
   });
 }
 function legacyRunEvidence(log) {

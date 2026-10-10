@@ -37,12 +37,12 @@ function lines(value,tasks={}) {
   return platforms.map(p=>{
     const x=ledger[p],done=complete(ledger,p);
     const label=p==='mobile'?'📱 <b>Mobile search:</b>':'🖥️ <b>Desktop search:</b>';
-    return label+' '+(x.verified?'':'Ít nhất ')+x.points+'/'+x.target+' điểm · '+
+    return label+' '+(x.verified?'Đã ghi nhận ':'Ít nhất ')+x.points+'/'+x.target+' điểm · '+
       (done?'✅ Hoàn thành mục tiêu':tasks[p+'Search']==='complete'?'✅ Microsoft xác nhận hết quota':
-        x.verified?'⚠️ Còn thiếu '+(x.target-x.points):'❔ Chưa đủ dữ liệu');
+        x.verified?'⚠️ Còn thiếu '+(x.target-x.points)+' so với mục tiêu':'❔ Chưa đủ dữ liệu');
   });
 }
-function legacyRunPoints(log) {
+function legacyRunEvidence(log) {
   const result={mobile:0,desktop:0},seen={mobile:false,desktop:false},uncertain={mobile:false,desktop:false};
   for(const line of String(log).split('\n')) {
     const match=/\b(MOBILE|DESKTOP) \[SEARCH-BING\] (.*)/.exec(line);
@@ -58,7 +58,11 @@ function legacyRunPoints(log) {
       else uncertain[p]=true;
     }
   }
-  return Object.fromEntries(platforms.map(p=>[p,seen[p]&&!uncertain[p]?result[p]:null]));
+  return Object.fromEntries(platforms.map(p=>[p,{points:result[p],verified:seen[p]&&!uncertain[p]}]));
+}
+function legacyRunPoints(log) {
+  const evidence=legacyRunEvidence(log);
+  return Object.fromEntries(platforms.map(p=>[p,evidence[p].verified?evidence[p].points:null]));
 }
 async function review(state,ctx,readReport,readLog) {
   let result={mobile:{points:0,verified:true},desktop:{points:0,verified:true}};
@@ -75,11 +79,14 @@ async function review(state,ctx,readReport,readLog) {
       let credited=report.searchPoints;
       if(!credited && ['morning','retry','reconcile'].includes(mode)) {
         const log=await readLog(entry);
-        credited=legacyRunPoints(log);
+        const evidence=legacyRunEvidence(log);
+        // An ambiguous bonus does not invalidate the smaller query receipts already observed.
+        credited=Object.fromEntries(platforms.map(p=>[p,evidence[p].points]));
+        for(const p of platforms) if(!evidence[p].verified) result[p].verified=false;
       } else if(!credited) credited={mobile:0,desktop:0};
       result=add(result,credited);
     }
   }
   return progress(result);
 }
-module.exports={targets,platforms,runPoints,progress,add,complete,needsReview,applyTasks,lines,legacyRunPoints,review};
+module.exports={targets,platforms,runPoints,progress,add,complete,needsReview,applyTasks,lines,legacyRunEvidence,legacyRunPoints,review};

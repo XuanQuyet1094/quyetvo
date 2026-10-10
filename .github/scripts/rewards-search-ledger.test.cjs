@@ -95,3 +95,24 @@ test('state claim seeds the private budget with legacy credits instead of repeat
   assert.equal(JSON.parse(child.REWARDS_SEARCH_LEDGER).progress.desktop.points,87);
  }finally{for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('an ambiguous historical reward keeps confirmed query credits as a lower bound',async()=>{
+ const log=['MOBILE [SEARCH-BING] Starting Bing searches',
+  ...Array.from({length:19},()=> 'MOBILE [SEARCH-BING] pointsGained=3 | currentBalance=1'),
+  'MOBILE [SEARCH-BING] pointsGained=100 | currentBalance=1',
+  'DESKTOP [SEARCH-BING] Starting Bing searches'].join('\n');
+ const state={morning:{runId:'100',runAttempt:'1',finishedAt:'2026-10-10T01:00:00Z'}};
+ const result=await ledger.review(state,{date:'2026-10-10',slot:1},async()=>({date:'2026-10-10',accountId:1}),async()=>log);
+ assert.equal(result.mobile.points,57);assert.equal(result.mobile.verified,false);
+ assert.equal(result.desktop.points,0);assert.equal(result.desktop.verified,true);
+ assert.ok(ledger.lines(result).join('\n').includes('Ít nhất 57/60'));
+ assert.equal(ledger.needsReview(result),true);
+});
+
+test('the configured goal and a reliable Microsoft quota are reported separately',()=>{
+ const text=ledger.lines(base,{mobileSearch:'complete',desktopSearch:'unknown'}).join('\n');
+ assert.ok(text.includes('Đã ghi nhận 57/60'));
+ assert.ok(text.includes('Microsoft xác nhận hết quota'));
+ assert.ok(text.includes('Còn thiếu 3 so với mục tiêu'));
+ assert.equal(ledger.needsReview(base,{mobileSearch:'complete',desktopSearch:'complete'}),false);
+});

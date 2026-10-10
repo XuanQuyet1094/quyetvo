@@ -9,6 +9,7 @@ const {setTimeout: wait} = require('node:timers/promises');
 const createDiagnostics = require('./rewards-diagnostics.cjs');
 const schedule = require('./rewards-schedule.cjs');
 const taskStatus = require('./rewards-tasks.cjs');
+const searchLedger = require('./rewards-search-ledger.cjs');
 
 const slots = [1, 2, 3, 4, 5, 6];
 const number = v => typeof v === 'number' && Number.isSafeInteger(v) ? v : null;
@@ -84,6 +85,12 @@ function cleanResult(r, id) {
 }
 function childEnvironment(source, id) {
   const env = {...source};
+  if (['morning','retry','reconcile'].includes(source.RUN_MODE)) {
+    const budget=read(path.join(source.RUNNER_TEMP,'rewards-private','search-budget.json'));
+    if (!budget || budget.schema!==1 || budget.date!==source.RUN_DATE || budget.accountId!==id)
+      throw new Error('Missing or invalid daily search budget');
+    env.REWARDS_SEARCH_LEDGER=JSON.stringify(budget);
+  } else delete env.REWARDS_SEARCH_LEDGER;
   if (['morning', 'retry', 'reconcile', 'app-read-test'].includes(source.RUN_MODE)) {
     const budget = read(path.join(source.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
     if (!budget && source.RUN_MODE === 'app-read-test') throw new Error('Missing private reading budget');
@@ -124,6 +131,19 @@ function configure(diagnosticOnly = false) {
   cfg.errorDiagnostics = false;
   cfg.debugLogs = false;
   cfg.sessionPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', 'sessions');
+  if (['morning','retry','reconcile'].includes(process.env.RUN_MODE)) {
+    cfg.searchSettings ||= {};
+    cfg.searchSettings.parallelSearching=false;
+    cfg.searchSettings.runOnZeroPoints=false;
+    if (cfg.experimental) {
+      cfg.experimental.apiSearch=false;
+      cfg.experimental.apiSearchOnBing=false;
+      cfg.experimental.edgeBrowsing=false;
+    }
+    const budget=read(path.join(process.env.RUNNER_TEMP,'rewards-private','search-budget.json'));
+    if(budget?.date===process.env.RUN_DATE && budget?.accountId===Number(process.env.ACCOUNT_SLOT))
+      for(const p of searchLedger.platforms) if(searchLedger.complete(budget.progress,p)) cfg.workers[p==='mobile'?'doMobileSearch':'doDesktopSearch']=false;
+  }
   if (diagnosticOnly) {
     cfg.ensureStreakProtection = false;
     cfg.autoClaimPunchcardRewards = false;
@@ -189,6 +209,9 @@ async function runAccount(options = {}) {
   let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
   let appAuthRejected = false, appCheckInAttempted = false;
   let verifiedTasks = taskStatus.tasks(), readingPoints = 0, readingUncertain = false;
+  const searchBudget=read(path.join(source.RUNNER_TEMP,'rewards-private','search-budget.json'));
+  const hasSearchBudget=searchBudget?.schema===1 && searchBudget.date===source.RUN_DATE && searchBudget.accountId===id;
+  const searchPoints={mobile:0,desktop:0};
   function persist(code, signal) {
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
@@ -199,6 +222,12 @@ async function runAccount(options = {}) {
       result.errorCode = stopped || result.errorCode || (code !== 0 || signal ? 'PROCESS_FAILED' : 'NO_FINAL_RESULT');
     }
     result.durationSeconds = Math.round((Date.now() - started) / 1000);
+    if(hasSearchBudget) {
+      result.searchPoints={...searchPoints};
+      result.dailySearch=searchLedger.add(searchBudget.progress,searchPoints);
+      verifiedTasks=searchLedger.applyTasks(verifiedTasks,result.dailySearch);
+      if(searchLedger.platforms.every(p=>verifiedTasks[p+'Search']==='complete')) result.searchQuota='complete';
+    }
     result.tasks = verifiedTasks;
     result.readingPoints = readingPoints === 30 ? 30 :
       readingUncertain || stopped || code !== 0 || signal ? null : readingPoints;
@@ -263,6 +292,14 @@ async function runAccount(options = {}) {
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
       diagnose(line);
+      const searchAt=line.indexOf('DAILY_SEARCH_CREDIT ');
+      if(hasSearchBudget && searchAt>=0) try {
+        const event=JSON.parse(line.slice(searchAt+'DAILY_SEARCH_CREDIT '.length));
+        const p=event.platform;
+        if(event.schema===1 && event.date===source.RUN_DATE && event.accountId===id && searchLedger.platforms.includes(p) &&
+           Number.isSafeInteger(event.points) && event.points>=searchPoints[p] && event.points<=searchLedger.targets[p])
+          searchPoints[p]=event.points;
+      } catch {}
       for (const marker of ['DAILY_TASK_VERIFICATION ', 'DAILY_READING_CREDIT ']) {
         const position = line.indexOf(marker);
         if (position < 0) continue;
@@ -337,7 +374,7 @@ function accountMessage(r, email, url) {
     `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
     `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
     `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
-    ...(r.tasks ? taskStatus.lines(r.tasks) : [
+    ...(r.tasks ? taskStatus.lines(r.tasks,r.dailySearch) : [
       `🔥 <b>Daily Set:</b> ${dailyText}`,
       `📱 <b>App check-in:</b> ${{verified:'Máy chủ xác nhận',auth_rejected:'Chưa thực hiện · API từ chối 401',unverified:'Đã gửi · Chưa xác minh',not_requested:'Không được yêu cầu'}[r.appCheckIn] || 'Chưa xác minh'}`,
       '📰 <b>Read to Earn:</b> Chưa xác minh',
@@ -345,11 +382,13 @@ function accountMessage(r, email, url) {
     ]),
     `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`
   ];
-  if (process.env.RUN_MODE === 'morning' && require('./rewards-state.cjs').needsPointsReview(r.pointsEarned))
-    lines.push('🔍 <b>Cần kiểm tra lại:</b> Điểm dưới 220 hoặc chưa xác minh; sẽ được xét lượt dự phòng trong ngày.');
+  if (process.env.RUN_MODE === 'morning' && (require('./rewards-state.cjs').needsPointsReview(r.pointsEarned) ||
+      Object.values(r.tasks||{}).includes('missing') || (r.dailySearch && searchLedger.needsReview(r.dailySearch,r.tasks))))
+    lines.push('🔍 <b>Cần kiểm tra lại:</b> Dưới 220 điểm hoặc còn nhiệm vụ/mục tiêu tìm kiếm chưa hoàn thành; sẽ được xét lượt dự phòng.');
   if (process.env.RUN_MODE === 'reconcile' &&
       (r.tasks?.mobileSearch === 'unknown' || r.tasks?.desktopSearch === 'unknown' || r.searchQuota === 'unknown'))
-    lines.push('ℹ️ Quota tìm kiếm chưa đọc được. Dừng theo giới hạn không đồng nghĩa đã đủ điểm.');
+    lines.push(r.dailySearch ? 'ℹ️ Tiến độ tìm kiếm tính theo các lần tăng số dư sau từng search; mục tiêu mỗi ngày là 60/90 điểm.' :
+      'ℹ️ Quota tìm kiếm chưa đọc được. Dừng theo giới hạn không đồng nghĩa đã đủ điểm.');
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {
@@ -385,7 +424,7 @@ async function prepareReport() {
   // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
     initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn,
-    tasks: r.tasks, readingPoints: r.readingPoints};
+    tasks: r.tasks, readingPoints: r.readingPoints, searchPoints:r.searchPoints, dailySearch:r.dailySearch};
   await require('./rewards-state.cjs').savePrivateReport(output);
   await require('./rewards-operations.cjs').enqueue(`account-${id}`,
     accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
@@ -409,10 +448,11 @@ function summaryMessage(jobs, env = process.env) {
     `💰 <b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
-    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã chạy xong' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
-    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks));
-    if (env.RUN_MODE === 'morning' && r && require('./rewards-state.cjs').needsPointsReview(r.pointsEarned))
-      lines.push('🔍 Cần kiểm tra lại: dưới 220 điểm hoặc chưa đủ số liệu.');
+    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã kết thúc lượt' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
+    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks,r.dailySearch));
+    if (env.RUN_MODE === 'morning' && r && (require('./rewards-state.cjs').needsPointsReview(r.pointsEarned) ||
+        Object.values(r.tasks||{}).includes('missing') || (r.dailySearch && searchLedger.needsReview(r.dailySearch,r.tasks))))
+      lines.push('🔍 Cần kiểm tra lại: dưới 220 điểm hoặc còn nhiệm vụ/mục tiêu tìm kiếm chưa hoàn thành.');
   }
   if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
   lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',

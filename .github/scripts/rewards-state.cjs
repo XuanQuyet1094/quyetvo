@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const taskStatus = require('./rewards-tasks.cjs');
+const searchLedger = require('./rewards-search-ledger.cjs');
 function privateRepository() {
   const value = process.env.REWARDS_PRIVATE_REPO || '';
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
@@ -53,7 +54,19 @@ function eligible(state, date, slot) {
   return Boolean(state && state.schema === 1 && state.date === date && state.accountId === slot &&
     !hasBlockedAttempt(state) && !state.retry &&
     ((state.morning?.status === 'failed' && state.morning.retryable === true) ||
-     (state.morning?.status === 'completed' && needsPointsReview(state.dailyReview?.pointsEarned))));
+     (state.morning?.status === 'completed' && (needsPointsReview(state.dailyReview?.pointsEarned) ||
+       Object.values(taskStatus.tasks(state.morning.tasks)).includes('missing') ||
+       (state.searchReview && searchLedger.needsReview(state.searchReview,state.morning.tasks))))));
+}
+async function dailySearchReview(state,ctx) {
+  return searchLedger.review(state,ctx,async entry=>{
+    const file=await api('/contents/reports/'+ctx.date+'/run-'+entry.runId+'-attempt-'+entry.runAttempt+'/account-'+ctx.slot+'.json?ref='+BRANCH,{},true);
+    return file ? JSON.parse(Buffer.from(file.content,'base64').toString('utf8')) : null;
+  },async entry=>{
+    const location='logs/'+ctx.date+'/account-'+ctx.slot+'-run-'+entry.runId+'-attempt-'+entry.runAttempt+'.log';
+    const file=await api('/contents/'+location+'?ref='+BRANCH,{},true);
+    return file ? Buffer.from(file.content,'base64').toString('utf8') : '';
+  });
 }
 async function dailyPointsReview(state, ctx) {
   // Read immutable, same-day private receipts. Never count an attempt twice.
@@ -142,6 +155,8 @@ async function claim() {
   if (['retry', 'reconcile'].includes(ctx.mode)) {
     state.dailyReview = await dailyPointsReview(state, ctx);
   }
+  if (['morning','retry','reconcile'].includes(ctx.mode) && !state[ctx.mode] && !hasBlockedAttempt(state))
+    state.searchReview = await dailySearchReview(state,ctx);
   if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(state).some(entry =>
       entry && typeof entry === 'object' && (entry.status === 'running' ||
       [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label)))))) {
@@ -206,6 +221,12 @@ async function claim() {
     fs.writeFileSync(path.join(folder, 'reading-budget.json'), JSON.stringify({date:ctx.date, accountId:ctx.slot, points:readingPointsBudget, verified:!receiptsUnavailable}), {mode:0o600});
   }
 
+  if (['morning','retry','reconcile'].includes(ctx.mode)) {
+    const folder=path.join(process.env.RUNNER_TEMP || path.dirname(process.env.GITHUB_OUTPUT),'rewards-private');
+    fs.mkdirSync(folder,{recursive:true,mode:0o700});
+    fs.writeFileSync(path.join(folder,'search-budget.json'),JSON.stringify({schema:1,date:ctx.date,accountId:ctx.slot,
+      progress:searchLedger.progress(state.searchReview)}),{mode:0o600});
+  }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
   const history = ['app-test', 'app-auth-probe', 'app-read-test'].includes(ctx.mode) && state[ctx.mode]
     ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
@@ -262,6 +283,8 @@ async function finish() {
   catch { console.error('Private setup log upload failed; status will still be saved.'); }
   state[ctx.mode] = {...entry, ...stateResult(result), ...(ctx.mode === 'app-test' ? {checkInVerified: result.appCheckInVerified === true} : {}), ...(ctx.mode === 'app-auth-probe' ? {authVerified: result.appAuthVerified === true} : {}), ...(logPath ? {logPath} : {}), ...(setupLogPath ? {setupLogPath} : {}), finishedAt: new Date().toISOString()};
   if (result.tasks) state[ctx.mode].tasks = taskStatus.tasks(result.tasks);
+  if (result.searchPoints) state[ctx.mode].searchPoints=searchLedger.runPoints(result.searchPoints);
+  if (result.dailySearch) state[ctx.mode].dailySearch=searchLedger.progress(result.dailySearch);
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }
@@ -289,7 +312,9 @@ function safeReport(value, slot, date) {
     initialBalance: metric(value.initialBalance, true),
     finalBalance: metric(value.finalBalance, true),
     errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null,
-    tasks: taskStatus.tasks(value.tasks), readingPoints: metric(value.readingPoints,true)};
+    tasks: taskStatus.tasks(value.tasks), readingPoints: metric(value.readingPoints,true),
+    ...(value.searchPoints ? {searchPoints:searchLedger.runPoints(value.searchPoints)} : {}),
+    ...(value.dailySearch ? {dailySearch:searchLedger.progress(value.dailySearch)} : {})};
 }
 async function requirePrivateReports() {
   if ((await api('')).private !== true) throw new Error('Reports repository must be private');
@@ -320,7 +345,7 @@ async function readPrivateReports(jobs) {
   return result;
 }
 
-module.exports = {DAILY_POINTS_TARGET, needsPointsReview, dailyPointsReview, retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
+module.exports = {DAILY_POINTS_TARGET, needsPointsReview, dailyPointsReview, dailySearchReview, retryable, eligible, stateResult, claim, finish, savePrivateReport, readPrivateReports,
   api, requirePrivateReports, reportContext};
 if (require.main === module) {
   const task = process.argv[2] === 'claim' ? claim :
@@ -339,4 +364,5 @@ if (require.main === module) {
     process.exitCode = 1;
   });
 }
+
 

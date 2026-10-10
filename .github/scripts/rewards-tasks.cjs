@@ -10,13 +10,13 @@ function merge(previous, next) {
   return current;
 }
 const labels={complete:'✅ Hoàn thành',missing:'⚠️ Còn thiếu',unknown:'❔ Chưa xác minh'};
-function lines(value,search) {
+function lines(value,search,evidence) {
   const t=tasks(value);
   return [
     '🔥 <b>Daily Set:</b> '+labels[t.dailySet],
     '📱 <b>App check-in:</b> '+labels[t.appCheckIn],
     '📰 <b>Read to Earn:</b> '+labels[t.readToEarn],
-    ...(search ? require('./rewards-search-ledger.cjs').lines(search,t) :
+    ...(evidence ? require('./rewards-search-evidence.cjs').lines(evidence,search) : search ? require('./rewards-search-ledger.cjs').lines(search,t) :
       ['🔎 <b>Tìm kiếm:</b> Điện thoại '+labels[t.mobileSearch]+' · Máy tính '+labels[t.desktopSearch]])
   ];
 }

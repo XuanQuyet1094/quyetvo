@@ -285,6 +285,7 @@ async function finish() {
   if (result.tasks) state[ctx.mode].tasks = taskStatus.tasks(result.tasks);
   if (result.searchPoints) state[ctx.mode].searchPoints=searchLedger.runPoints(result.searchPoints);
   if (result.dailySearch) state[ctx.mode].dailySearch=searchLedger.progress(result.dailySearch);
+  if (result.searchEvidence) state[ctx.mode].searchEvidence=require('./rewards-search-evidence.cjs').normalize(result.searchEvidence);
   await put(ctx, state, sha);
   console.log(logPath ? 'Private result and redacted bot log saved to rewards-state.' : 'Private result saved; bot log was not available.');
 }
@@ -314,7 +315,8 @@ function safeReport(value, slot, date) {
     errorCode: typeof value.errorCode === 'string' && /^[A-Z_0-9]{1,50}$/.test(value.errorCode) ? value.errorCode : null,
     tasks: taskStatus.tasks(value.tasks), readingPoints: metric(value.readingPoints,true),
     ...(value.searchPoints ? {searchPoints:searchLedger.runPoints(value.searchPoints)} : {}),
-    ...(value.dailySearch ? {dailySearch:searchLedger.progress(value.dailySearch)} : {})};
+    ...(value.dailySearch ? {dailySearch:searchLedger.progress(value.dailySearch)} : {}),
+    ...(value.searchEvidence ? {searchEvidence:require('./rewards-search-evidence.cjs').normalize(value.searchEvidence)} : {})};
 }
 async function requirePrivateReports() {
   if ((await api('')).private !== true) throw new Error('Reports repository must be private');

@@ -11,8 +11,9 @@ test('day ledger combines separate platforms, caps targets, preserves uncertaint
  const reports={'100':{date:'2026-10-10',accountId:1,searchPoints:{mobile:57,desktop:87}},
   '101':{date:'2026-10-10',accountId:1,searchPoints:{mobile:3,desktop:3}}};
  const result=await ledger.review(state,{date:'2026-10-10',slot:1},async e=>{reads++;return reports[e.runId];},async()=>{throw Error('New receipts should not reread logs');});
- assert.equal(reads,2);assert.equal(result.mobile.points,60);assert.equal(result.desktop.points,90);assert.equal(ledger.needsReview(result),false);
- assert.equal(ledger.add(result,{mobile:3,desktop:3}).mobile.points,60);
+ assert.equal(reads,2);assert.equal(result.mobile.points,60);assert.equal(result.desktop.points,90);assert.equal(ledger.needsReview(result),true);
+ assert.equal(ledger.needsReview(result,{mobileSearch:'complete',desktopSearch:'complete'}),false);
+ assert.equal(ledger.add(result,{mobile:3,desktop:3}).mobile.points,63);
  assert.equal(ledger.add(base,{mobile:null,desktop:3}).mobile.verified,false);
  assert.equal(ledger.add(base,{mobile:0,desktop:3}).desktop.points,90);
  reports['101'].date='2026-10-09';
@@ -39,16 +40,17 @@ test('retry considers remaining tasks/search goals even when total points exceed
  assert.equal(stateApi.eligible({...s,retry:{status:'failed'}},s.date,5),false);
  assert.equal(stateApi.eligible({...s,morning:{status:'completed',diagnostic:{errors:['TOTP_REJECTED']}}},s.date,5),false);
  const complete={mobile:{points:60,verified:true},desktop:{points:90,verified:true}};
- assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete'}},searchReview:complete},s.date,5),false);
+ assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete'}},searchReview:complete},s.date,5),true);
  assert.equal(stateApi.eligible({...s,morning:{status:'completed',tasks:{dailySet:'complete',mobileSearch:'complete',desktopSearch:'complete'}}},s.date,5),false);
 });
 test('Telegram shows independent day counters and goal completion without changing missing Daily Set',()=>{
  const completed=ledger.add(base,{mobile:3,desktop:3});
  const tasks=ledger.applyTasks({dailySet:'missing',mobileSearch:'unknown',desktopSearch:'unknown'},completed);
- const text=runner.accountMessage({accountId:5,date:'2026-10-10',status:'completed',pointsEarned:6,tasks,dailySearch:completed},'fixture@example.invalid','https://example.invalid');
- assert.ok(text.includes('60/60'));assert.ok(text.includes('90/90'));assert.ok(text.includes('Hoàn thành mục tiêu'));assert.ok(text.includes('Daily Set:</b> ⚠️ Còn thiếu'));
+ const searchEvidence={mobile:{earned:60,max:60,source:'api'},desktop:{earned:90,max:90,source:'api'}};
+ const text=runner.accountMessage({accountId:5,date:'2026-10-10',status:'completed',pointsEarned:6,tasks,dailySearch:completed,searchEvidence},'fixture@example.invalid','https://example.invalid');
+ assert.ok(text.includes('60/60'));assert.ok(text.includes('90/90'));assert.ok(text.includes('✅ Hoàn thành'));assert.ok(text.includes('Daily Set:</b> ⚠️ Còn thiếu'));
  const partial=ledger.lines(base,{mobileSearch:'unknown',desktopSearch:'unknown'}).join('\n');
- assert.ok(partial.includes('57/60'));assert.ok(partial.includes('87/90'));assert.ok(partial.includes('Chưa xác minh hoàn tất quota'));
+ assert.ok(partial.includes('57 điểm'));assert.ok(partial.includes('87 điểm'));assert.ok(partial.includes('Chưa xác minh hoàn tất quota'));
  assert.ok(!partial.includes('Còn thiếu 3'));
 });
 test('runner persists partial cumulative search receipts after failure and rejects wrong identity/day or duplicate events',async t=>{
@@ -69,7 +71,7 @@ test('runner persists partial cumulative search receipts after failure and rejec
   const r=JSON.parse(fs.readFileSync(env.REPORT_PATH));
   assert.equal(r.status,'failed');assert.deepEqual(r.searchPoints,{mobile:3,desktop:0});
   assert.equal(r.dailySearch.mobile.points,60);assert.equal(r.dailySearch.desktop.points,87);
-  assert.equal(r.tasks.mobileSearch,'complete');assert.equal(r.tasks.desktopSearch,'unknown');
+  assert.equal(r.tasks.mobileSearch,'unknown');assert.equal(r.tasks.desktopSearch,'unknown');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('state claim seeds the private budget with legacy credits instead of repeating the entire target',async t=>{
@@ -106,13 +108,13 @@ test('an ambiguous historical reward keeps confirmed query credits as a lower bo
  const result=await ledger.review(state,{date:'2026-10-10',slot:1},async()=>({date:'2026-10-10',accountId:1}),async()=>log);
  assert.equal(result.mobile.points,57);assert.equal(result.mobile.verified,false);
  assert.equal(result.desktop.points,0);assert.equal(result.desktop.verified,true);
- assert.ok(ledger.lines(result).join('\n').includes('Ít nhất 57/60'));
+ assert.ok(ledger.lines(result).join('\n').includes('Ít nhất 57 điểm'));
  assert.equal(ledger.needsReview(result),true);
 });
 
 test('the configured goal and a reliable Microsoft quota are reported separately',()=>{
  const text=ledger.lines(base,{mobileSearch:'complete',desktopSearch:'unknown'}).join('\n');
- assert.ok(text.includes('Đã ghi nhận 57/60'));
+ assert.ok(text.includes('Đã ghi nhận 57 điểm'));
  assert.ok(text.includes('Microsoft xác nhận hết quota'));
  assert.ok(text.includes('Chưa xác minh hoàn tất quota'));
  assert.equal(ledger.needsReview(base,{mobileSearch:'complete',desktopSearch:'complete'}),false);

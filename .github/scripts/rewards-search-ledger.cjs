@@ -2,7 +2,7 @@
 const targets = {mobile:60, desktop:90};
 const platforms = Object.keys(targets);
 const modes = ['morning','retry','reconcile','test','app-test','app-read-test'];
-const points = (value, platform) => Number.isSafeInteger(value) && value >= 0 && value <= targets[platform] ? value : null;
+const points = (value, platform) => Number.isSafeInteger(value) && value >= 0 && value <= 10000 ? value : null;
 function runPoints(value) {
   return Object.fromEntries(platforms.map(p => [p, points(value?.[p], p)]));
 }
@@ -16,19 +16,18 @@ function add(previous, credited) {
   const result=progress(previous), current=runPoints(credited);
   for(const p of platforms) {
     if(current[p] === null) result[p].verified=false;
-    else result[p].points=Math.min(targets[p],result[p].points+current[p]);
+    else result[p].points=Math.min(10000,result[p].points+current[p]);
   }
   return result;
 }
 function complete(value,p) { return progress(value)[p].points >= targets[p]; }
-function needsReview(value,tasks={}) { return platforms.some(p=>tasks[p+'Search']!=='complete' && !complete(value,p)); }
+function needsReview(value,tasks={}) { return platforms.some(p=>tasks[p+'Search']!=='complete'); }
 function applyTasks(tasks,value) {
   const result={...tasks};
   if(value) for(const p of platforms) {
     const key=p+'Search';
-    if(complete(value,p)) result[key]='complete';
     // A partial receipt total is a lower bound, not proof of outstanding Microsoft quota.
-    else if(!['complete','missing'].includes(result[key])) result[key]='unknown';
+    if(!['complete','missing'].includes(result[key])) result[key]='unknown';
   }
   return result;
 }
@@ -36,10 +35,10 @@ function lines(value,tasks={}) {
   if(!value) return [];
   const ledger=progress(value);
   return platforms.map(p=>{
-    const x=ledger[p],done=complete(ledger,p);
+    const x=ledger[p];
     const label=p==='mobile'?'📱 <b>Mobile search:</b>':'🖥️ <b>Desktop search:</b>';
-    return label+' '+(x.verified?'Đã ghi nhận ':'Ít nhất ')+x.points+'/'+x.target+' điểm · '+
-      (done?'✅ Hoàn thành mục tiêu':tasks[p+'Search']==='complete'?'✅ Microsoft xác nhận hết quota':
+    return label+' '+(x.verified?'Đã ghi nhận ':'Ít nhất ')+x.points+' điểm · '+
+      (tasks[p+'Search']==='complete'?'✅ Microsoft xác nhận hết quota':
         '❔ Chưa xác minh hoàn tất quota');
   });
 }
@@ -55,7 +54,7 @@ function legacyRunEvidence(log) {
       seen[p]=true;
       const n=Number(gain[1]);
       // Large delayed rewards are not search receipts. Do not count stage totals.
-      if(n>0 && n<=3) result[p]=Math.min(targets[p],result[p]+n);
+      if(n>0 && n<=3) result[p]=Math.min(10000,result[p]+n);
       else uncertain[p]=true;
     }
   }

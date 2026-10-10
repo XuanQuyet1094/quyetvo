@@ -36,7 +36,7 @@ test('Telegram repair separates platform status and never promotes an unknown qu
   tasks:{dailySet:'complete',appCheckIn:'complete',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'missing'}},'fixture@example.invalid','https://example.invalid');
  assert.ok(message.includes('Điện thoại ❔ Chưa xác minh'));
  assert.ok(message.includes('Máy tính ⚠️ Còn thiếu'));
- assert.ok(message.includes('không đồng nghĩa đã đủ điểm'));
+ assert.ok(message.includes('chỉ tìm kiếm khi Microsoft xác nhận quota còn thiếu'));
  }finally{if(previous===undefined)delete process.env.RUN_MODE;else process.env.RUN_MODE=previous;}
 });
 test('repair reserves one attempt per day, blocks running/auth failures and subtracts only reading receipts',async t=>{

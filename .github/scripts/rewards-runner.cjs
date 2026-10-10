@@ -467,7 +467,7 @@ function summaryMessage(jobs, env = process.env) {
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
     lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? 'Đã kết thúc lượt' : 'Cần kiểm tra'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
-    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks,r.dailySearch,r.searchEvidence));
+    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks,r.dailySearch,r.searchEvidence,true));
     if (env.RUN_MODE === 'morning' && r && (require('./rewards-state.cjs').needsPointsReview(r.pointsEarned) ||
         Object.values(r.tasks||{}).includes('missing') || (r.dailySearch && searchLedger.needsReview(r.dailySearch,r.tasks))))
       lines.push('🔍 Cần kiểm tra lại: dưới 220 điểm hoặc còn nhiệm vụ/mục tiêu tìm kiếm chưa hoàn thành.');

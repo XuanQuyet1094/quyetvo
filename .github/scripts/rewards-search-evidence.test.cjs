@@ -1,6 +1,15 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const evidence=require('./rewards-search-evidence.cjs');
+test('six-account summary with pending mixed rewards fits the Telegram notification limit',()=>{
+ const runner=require('./rewards-runner.cjs'),jobs={},env={RUN_MODE:'morning',RUN_DATE:'2026-10-10',RUN_URL:'https://github.com/example/public/actions/runs/123'};
+ for(let id=1;id<=6;id++) {
+  env['ACCOUNT_'+id+'_EMAIL']='fixture-account-'+id+'@example.invalid';
+  const r={accountId:id,status:'completed',pointsEarned:155,initialBalance:10000,finalBalance:10155,tasks:{dailySet:'missing',appCheckIn:'unknown',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'unknown'},dailySearch:{mobile:{points:57,verified:true},desktop:{points:87,verified:true}},searchEvidence:{pending:{total:106},claimReceived:106}};
+  jobs['account_'+id]={outputs:{result:JSON.stringify(r)}};
+ }
+ const text=runner.summaryMessage(jobs,env);assert.ok(text.length<=4096);assert.ok(text.includes('quota ❔'));assert.ok(text.includes('chưa phân bổ search'));assert.ok(!text.includes('57/60'));
+});
 test('worker persists sanitized quotas and mixed claim separately, ignoring another account or day',async t=>{
  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),runner=require('./rewards-runner.cjs');
  t.mock.method(Date,'now',()=>Date.parse('2026-10-10T18:17:00+07:00'));

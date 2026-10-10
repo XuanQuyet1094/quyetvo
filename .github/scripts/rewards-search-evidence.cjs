@@ -18,8 +18,19 @@ function applyTasks(tasks,value) {
   }
   return out;
 }
-function lines(value,receipts) {
+function lines(value,receipts,compact=false) {
   const e=normalize(value),out=[];
+  if(compact) {
+    for(const p of ['mobile','desktop']) {
+      const q=e[p]||e.shared,n=metric(receipts?.[p]?.points);
+      out.push((p==='mobile'?'📱 Mobile':'🖥️ Desktop')+': '+(n===null?'điểm chưa rõ':(receipts?.[p]?.verified===false?'≥':'')+n+' điểm quan sát')+
+        (q?' · '+(e.shared?'quota chung ':'quota ')+q.earned+'/'+q.max+' '+(q.earned===q.max?'✅':'⚠️'):' · quota ❔'));
+    }
+    if(e.pending.total!==null) out.push('🎁 Chờ nhận (tổng): '+e.pending.total+' điểm');
+    if(e.claimReceived!==null) out.push('📥 Claim: +'+e.claimReceived+' điểm · chưa phân bổ search');
+    if(e.limited) out.push('⏳ Search đang bị giới hạn');
+    return out;
+  }
   if(e.shared) out.push('🔎 <b>Quota search chung:</b> '+e.shared.earned+'/'+e.shared.max+' điểm · '+(e.shared.earned>=e.shared.max?'✅ Hoàn thành':'⚠️ Còn '+(e.shared.max-e.shared.earned)+' điểm'));
   for(const p of ['mobile','desktop']) {
     const q=e[p],recorded=metric(receipts?.[p]?.points),label=p==='mobile'?'📱 <b>Mobile search:</b>':'🖥️ <b>Desktop search:</b>';

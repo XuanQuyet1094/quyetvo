@@ -1,0 +1,148 @@
+name: Reconcile Rewards 2026-10-10
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reconcile-2026-10-10.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+      mode: ${{ steps.plan.outputs.mode }}
+      run: ${{ steps.plan.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate original Vietnam date and execution window
+        id: plan
+        env:
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MODE: reconcile
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(TZ=Asia/Ho_Chi_Minh date +%F)" != "2026-10-10" ]; then
+            printf 'date=2026-10-10\nmode=reconcile\nrun=false\n' >> "$GITHUB_OUTPUT"
+            echo 'Skipped: this manual reconciliation applies only to its original Vietnam date.'
+            exit 0
+          fi
+          node .github/scripts/rewards-schedule.cjs plan
+
+  account_1:
+    name: Worker
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 1
+      run_mode: ${{ github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only' && 'test' || needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_2:
+    name: Worker
+    needs: [plan, account_1]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 2
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_3:
+    name: Worker
+    needs: [plan, account_2]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 3
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_4:
+    name: Worker
+    needs: [plan, account_3]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 4
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_5:
+    name: Worker
+    needs: [plan, account_4]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 5
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  account_6:
+    name: Worker
+    needs: [plan, account_5]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 6
+      run_mode: ${{ needs.plan.outputs.mode }}
+      run_date: ${{ needs.plan.outputs.date }}
+      debug_daily_set: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_daily_set || false }}
+    secrets: inherit
+
+  summary:
+    name: Daily Telegram summary
+    needs: [plan, account_1, account_2, account_3, account_4, account_5, account_6]
+    if: ${{ !cancelled() && needs.plan.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.run_scope == 'account_1_only') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Send totals privately
+        env:
+          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_MODE: ${{ needs.plan.outputs.mode }}
+          RUN_DATE: ${{ needs.plan.outputs.date }}
+          STATE_ENABLED: ${{ secrets.REWARDS_STATE_TOKEN != '' && 'true' || 'false' }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_2_EMAIL: ${{ secrets.ACCOUNT_2_EMAIL }}
+          ACCOUNT_3_EMAIL: ${{ secrets.ACCOUNT_3_EMAIL }}
+          ACCOUNT_4_EMAIL: ${{ secrets.ACCOUNT_4_EMAIL }}
+          ACCOUNT_5_EMAIL: ${{ secrets.ACCOUNT_5_EMAIL }}
+          ACCOUNT_6_EMAIL: ${{ secrets.ACCOUNT_6_EMAIL }}
+        run: node .github/scripts/rewards-runner.cjs summary
+

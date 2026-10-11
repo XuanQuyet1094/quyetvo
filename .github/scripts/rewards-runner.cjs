@@ -140,7 +140,7 @@ function configure(diagnosticOnly = false) {
     if (cfg.experimental) {
       cfg.experimental.apiSearch=false;
       cfg.experimental.apiSearchOnBing=false;
-      cfg.experimental.edgeBrowsing=false;
+      cfg.experimental.edgeBrowsing=process.env.RUN_MODE === 'morning';
     }
     // Keep configured search workers available until the bot reads Microsoft quota.
     // Observed balance receipts alone cannot disable a platform at a fixed goal.

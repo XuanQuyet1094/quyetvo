@@ -25,9 +25,9 @@ jobs:
     name: Edge activation
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
-        account: ${{ fromJSON(inputs.account == 'all' && '[1,2,3,4,5,6]' || format('[{0}]', inputs.account || '3')) }}
+        account: ${{ fromJSON(github.event_name == 'push' && '[1,2,4,5,6]' || inputs.account == 'all' && '[1,2,3,4,5,6]' || format('[{0}]', inputs.account || '3')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:

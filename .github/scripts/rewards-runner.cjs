@@ -197,6 +197,10 @@ function configure(diagnosticOnly = false) {
   for (const channel of Object.values(cfg.webhook || {})) {
     if (channel && typeof channel === 'object' && 'enabled' in channel) channel.enabled = false;
   }
+  if (diagnosticOnly) {
+    cfg.experimental ||= {};
+    cfg.experimental.edgeBrowsing = process.env.REWARDS_EDGE_ACTIVATION_ONLY === 'true';
+  }
   save(path.join(dir, 'config.json'), cfg);
   fs.writeFileSync(path.join(dir, '.env'), '', {mode: 0o600});
 }

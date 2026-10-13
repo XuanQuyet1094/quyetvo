@@ -154,3 +154,5 @@ jobs:
       - name: Mark diagnostic outcome
         if: ${{ always() && steps.bot.outcome == 'failure' }}
         run: exit 1
+
+# Verification revision: wait for Edge UI activation before closing the mobile session.

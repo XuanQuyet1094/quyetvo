@@ -391,14 +391,51 @@ async function runAccount(options = {}) {
 
 const statusText = {completed: 'Đã kết thúc lượt chạy', failed: 'Lượt chạy gặp lỗi', needs_action: 'Cần kiểm tra', running: 'Chưa kết thúc'};
 const quotaText = {complete: 'Đã hết hạn mức', remaining: 'Còn hạn mức', unknown: 'Chưa xác minh', not_requested: 'Không được yêu cầu'};
+// Presentation thresholds only: never write these inferred states to the private
+// ledger or use them to authorize/skip searches. Microsoft quota takes priority.
+function reportTasks(r) {
+  const t = searchEvidence.applyTasks(taskStatus.tasks(r.tasks), r.searchEvidence);
+  const e = searchEvidence.normalize(r.searchEvidence);
+  for (const [platform, goal] of [['mobile', 57], ['desktop', 87]]) {
+    const receipt = r.dailySearch?.[platform];
+    if (t[platform + 'Search'] === 'unknown' && !e[platform] && !e.shared && !e.limited &&
+        searchEvidence.metric(receipt?.points) !== null && receipt.verified !== false && receipt.points >= goal)
+      t[platform + 'Search'] = 'complete';
+  }
+  return t;
+}
+function reportCompletion(r) {
+  return taskStatus.completion(reportTasks(r), r.requiredTasks);
+}
+function reportLabel(r) {
+  const status = reportCompletion(r).status;
+  return status === 'verified' ? '✅ Hoàn tất theo báo cáo' : taskStatus.completionLabels[status];
+}
+function reportLines(r) {
+  const t = reportTasks(r), e = searchEvidence.normalize(r.searchEvidence);
+  const labelFor = state => ({complete:'✅ Hoàn thành',missing:'⚠️ Còn thiếu',unknown:'❔ Chưa xác minh'}[state]);
+  const out = [
+    '🔥 <b>Daily Set:</b> ' + labelFor(t.dailySet),
+    '📱 <b>App check-in:</b> ' + labelFor(t.appCheckIn),
+    '📰 <b>Read to Earn:</b> ' + labelFor(t.readToEarn)
+  ];
+  for (const p of ['mobile', 'desktop']) {
+    const q = e[p] || e.shared, n = searchEvidence.metric(r.dailySearch?.[p]?.points);
+    const label = p === 'mobile' ? '📱 <b>Mobile search:</b> ' : '🖥️ <b>Desktop search:</b> ';
+    out.push(label + (t[p+'Search'] === 'complete' && !q && r.tasks?.[p+'Search'] !== 'complete'
+      ? '✅ Đủ mức báo cáo' : labelFor(t[p+'Search'])) +
+      (q ? ' · ' + q.earned + '/' + q.max + ' điểm' : n !== null ? ' · ' + n + ' điểm' : ''));
+  }
+  if (e.limited) out.push('⏳ Search đang bị giới hạn');
+  return out;
+}
 function accountMessage(r, email, url) {
   if (process.env.RUN_MODE === 'app-auth-probe') return [
     '🔬 <b>KIỂM TRA XÁC THỰC APP</b>',
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
     r.appAuthVerified ? '✅ API App đã chấp nhận token.' : '❌ Chưa xác thực được API App.',
-    'Chế độ chỉ đọc; kết quả chi tiết đã lưu private.',
-    `<a href="${html(url)}">🔗 Xem lượt kiểm tra GitHub</a>`
+    'Chế độ chỉ đọc; kết quả chi tiết đã lưu private.'
   ].join('\n');
   const daily = r.diagnostic?.dailySet;
   const dailyText = daily && daily.state !== 'unverified'
@@ -409,32 +446,22 @@ function accountMessage(r, email, url) {
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
     `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
-    `📋 <b>Hoàn tất nhiệm vụ:</b> ${taskStatus.completionLabels[taskStatus.completion(r.tasks,r.requiredTasks).status]}`,
+    `📋 <b>Hoàn tất nhiệm vụ:</b> ${reportLabel(r)}`,
     `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
     `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
-    ...(r.tasks ? taskStatus.lines(r.tasks,r.dailySearch,r.searchEvidence) : [
+    ...(r.tasks ? reportLines(r) : [
       `🔥 <b>Daily Set:</b> ${dailyText}`,
       `📱 <b>App check-in:</b> ${{verified:'Máy chủ xác nhận',auth_rejected:'Chưa thực hiện · API từ chối 401',unverified:'Đã gửi · Chưa xác minh',not_requested:'Không được yêu cầu'}[r.appCheckIn] || 'Chưa xác minh'}`,
       '📰 <b>Read to Earn:</b> Chưa xác minh',
       `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`
     ]),
-    `⏱️ <b>Thời gian:</b> ${number(r.durationSeconds) === null ? 'Chưa xác minh' : (r.durationSeconds / 60).toFixed(1) + ' phút'}`,
-    ...performance.lines(r.timings)
   ];
-  if (process.env.RUN_MODE === 'morning' && (require('./rewards-state.cjs').needsPointsReview(r.pointsEarned) ||
-      Object.values(r.tasks||{}).includes('missing') || (r.dailySearch && searchLedger.needsReview(r.dailySearch,r.tasks))))
-    lines.push(taskStatus.completion(r.tasks,r.requiredTasks).status==='verified' ? '🔍 <b>Cảnh báo điểm:</b> Dưới 220 hoặc thiếu số liệu; nhiệm vụ đã xác minh đủ, không tự lặp lại để đạt mốc.' : '🔍 <b>Cần kiểm tra lại:</b> Dưới 220 điểm hoặc nhiệm vụ chưa xác minh đủ; chạy bù xét bằng chứng còn thiếu.');
-  if (process.env.RUN_MODE === 'reconcile' &&
-      (r.tasks?.mobileSearch === 'unknown' || r.tasks?.desktopSearch === 'unknown' || r.searchQuota === 'unknown'))
-    lines.push('ℹ️ Lượt bù chỉ tìm kiếm khi Microsoft xác nhận quota còn thiếu; quota chưa rõ được giữ để kiểm tra.');
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {
     lines.push(`📍 <b>Bước cuối:</b> ${html(r.diagnostic.stage)}`);
     if (r.diagnostic.errors.length) lines.push(`🛠️ <b>Chẩn đoán:</b> ${html(r.diagnostic.errors.slice(-3).join(', '))}`);
   }
-  lines.push('', ['test','app-test','app-read-test','diagnostic'].includes(process.env.RUN_MODE) ? '🔬 Đã kết thúc lượt kiểm tra riêng.' : r.accountId < 6 ? '☕ Nghỉ ngẫu nhiên 100–180 giây rồi chuyển tài khoản tiếp theo.' : '🏁 Đã đến tài khoản cuối cùng trong danh sách.');
-  lines.push(`<a href="${html(url)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }
 async function telegram(text, env = process.env, fetchFn = fetch) {
@@ -481,22 +508,17 @@ function summaryMessage(jobs, env = process.env) {
   };
   const points = sum('pointsEarned'), initial = sum('initialBalance'), final = sum('finalBalance');
   const completed = rows.filter(({r}) => r?.status === 'completed').length;
-  const verified=rows.filter(({r})=>r?.status==='completed'&&taskStatus.completion(r.tasks,r.requiredTasks).status==='verified').length;
+  const verified=rows.filter(({r})=>r?.status==='completed'&&reportCompletion(r).status==='verified').length;
   const lines = ['🏆 <b>MICROSOFT REWARDS</b>', env.RUN_MODE === 'reconcile' ? '🔍 <b>Tổng kết kiểm tra và chạy bù</b>' : env.RUN_MODE === 'retry' ? '🔁 <b>Tổng kết lượt dự phòng</b>' : '📊 <b>Tổng kết 6 tài khoản</b>', `${env.RUN_DATE || dateVN()} · Giờ Việt Nam`, '',
     `💎 <b>Điểm ghi nhận:</b> ${points.n ? gain(points.total) : 'Chưa xác minh'} (${points.n}/6 tài khoản có số liệu)`,
-    `⚙️ <b>Tiến trình kết thúc:</b> ${completed}/6 · ✅ <b>Nhiệm vụ xác minh đủ:</b> ${verified}/6`,
+    `⚙️ <b>Tiến trình kết thúc:</b> ${completed}/6 · ✅ <b>Hoàn tất theo báo cáo:</b> ${verified}/6`,
     `💰 <b>Tổng số dư:</b> ${initial.n === 6 && final.n === 6 ? fmt(initial.total) + ' → ' + fmt(final.total) : 'Chưa đủ số liệu 6 tài khoản'}`, ''];
   for (const {id, r} of rows) {
     lines.push(`<b>${id}. ${html(env[`ACCOUNT_${id}_EMAIL`] || `Tài khoản ${id}`)}</b>`);
-    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? taskStatus.completionLabels[taskStatus.completion(r.tasks,r.requiredTasks).status] : 'Lượt chạy gặp lỗi'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
-    if (r?.tasks) lines.push(...taskStatus.lines(r.tasks,r.dailySearch,r.searchEvidence,true));
-    if (env.RUN_MODE === 'morning' && r && (require('./rewards-state.cjs').needsPointsReview(r.pointsEarned) ||
-        Object.values(r.tasks||{}).includes('missing') || (r.dailySearch && searchLedger.needsReview(r.dailySearch,r.tasks))))
-      lines.push(taskStatus.completion(r.tasks,r.requiredTasks).status==='verified' ? '🔍 Dưới 220/thiếu số liệu; nhiệm vụ đã xác minh đủ.' : '🔍 Cần xem lại điểm hoặc nhiệm vụ; bù theo quota thực tế.');
+    lines.push(r ? `${gain(r.pointsEarned)} điểm · ${r.status === 'completed' ? reportLabel(r) : 'Lượt chạy gặp lỗi'}` : env.RUN_MODE === 'retry' && jobs[`account_${id}`]?.result === 'success' ? 'Không thuộc diện chạy lại / đã dùng lượt dự phòng' : 'Không chạy hoặc chưa có kết quả');
+    if (r?.tasks) lines.push(...reportLines(r));
   }
   if (env.STATE_ENABLED === 'false') lines.push('', 'Chưa có REWARDS_STATE_TOKEN: chưa bật lưu trạng thái và chạy dự phòng.');
-  lines.push('', 'Điểm tính theo chênh lệch số dư của lượt chạy; không đồng nghĩa đã hoàn thành mọi nhiệm vụ.',
-    `<a href="${html(env.RUN_URL)}">🔗 Xem lượt chạy GitHub</a>`);
   return lines.join('\n');
 }
 async function main() {

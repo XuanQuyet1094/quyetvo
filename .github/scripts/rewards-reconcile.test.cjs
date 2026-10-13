@@ -34,9 +34,9 @@ test('Telegram repair separates platform status and never promotes an unknown qu
  const message=accountMessage({accountId:1,status:'completed',date:'2026-10-09',pointsEarned:3,
   initialBalance:100,finalBalance:103,searchQuota:'unknown',
   tasks:{dailySet:'complete',appCheckIn:'complete',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'missing'}},'fixture@example.invalid','https://example.invalid');
- assert.ok(message.includes('Điện thoại ❔ Chưa xác minh'));
- assert.ok(message.includes('Máy tính ⚠️ Còn thiếu'));
- assert.ok(message.includes('chỉ tìm kiếm khi Microsoft xác nhận quota còn thiếu'));
+ assert.ok(message.includes('Mobile search:</b> ❔ Chưa xác minh'));
+ assert.ok(message.includes('Desktop search:</b> ⚠️ Còn thiếu'));
+ assert.ok(!message.includes('chỉ tìm kiếm khi Microsoft xác nhận quota còn thiếu'));
  }finally{if(previous===undefined)delete process.env.RUN_MODE;else process.env.RUN_MODE=previous;}
 });
 test('repair reserves one attempt per day, blocks running/auth failures and subtracts only reading receipts',async t=>{
@@ -61,4 +61,3 @@ test('repair reserves one attempt per day, blocks running/auth failures and subt
  assert.equal(budget.points,0);assert.equal(budget.verified,false);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);fs.rmSync(dir,{recursive:true,force:true});}
 });
-

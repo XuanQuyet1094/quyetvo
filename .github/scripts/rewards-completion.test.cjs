@@ -26,7 +26,22 @@ test('timings deduplicate spans, retain interrupted work, and ignore unmatched o
  assert.deepEqual(c.snapshot(),[{stage:'login',durationMs:500,calls:1,failed:0,interrupted:false},{stage:'mobile_search',durationMs:1000,calls:1,failed:0,interrupted:true}]);
  assert.ok(!JSON.stringify(c.snapshot()).includes('PRIVATE-SECRET'));
 });
-test('Telegram distinguishes ended process from unverified daily completion and shows stage timings',()=>{
+test('Telegram distinguishes ended process from unverified daily completion and hides diagnostic timings',()=>{
  const text=runner.accountMessage({accountId:1,date:'2026-10-10',status:'completed',pointsEarned:260,tasks:{dailySet:'missing'},timings:[{stage:'login',durationMs:60000,calls:2}],requiredTasks:tasks.keys},'fixture@example.invalid','https://example.invalid');
- assert.ok(text.includes('Đã kết thúc lượt chạy'));assert.ok(text.includes('Còn nhiệm vụ chưa hoàn tất'));assert.ok(text.includes('Đăng nhập: 1.0p'));
+ assert.ok(text.includes('Đã kết thúc lượt chạy'));assert.ok(text.includes('Còn nhiệm vụ chưa hoàn tất'));assert.ok(!text.includes('Đăng nhập: 1.0p'));assert.ok(!text.includes('⏱️'));assert.ok(!text.includes('Xem lượt'));assert.ok(!text.includes('Nghỉ ngẫu nhiên'));
+});
+
+test('57/87 reporting thresholds do not change real task states or override Microsoft quota',()=>{
+ const r={accountId:1,date:'2026-10-13',status:'completed',pointsEarned:180,tasks:{...complete,mobileSearch:'unknown',desktopSearch:'unknown'},dailySearch:{mobile:{points:57,verified:true},desktop:{points:87,verified:true}},requiredTasks:tasks.keys};
+ const original=JSON.stringify(r);
+ const message=runner.accountMessage(r,'fixture@example.invalid','https://example.invalid');
+ assert.ok(message.includes('Đủ mức báo cáo · 57 điểm'));assert.ok(message.includes('Đủ mức báo cáo · 87 điểm'));
+ assert.ok(message.includes('Hoàn tất theo báo cáo'));assert.equal(JSON.stringify(r),original);
+ assert.equal(tasks.completion(r.tasks).status,'unverified');
+ r.searchEvidence={mobile:{earned:57,max:60,source:'api'},desktop:{earned:87,max:90,source:'ui'}};
+ const pending=runner.accountMessage(r,'fixture@example.invalid','https://example.invalid');
+ assert.ok(pending.includes('Còn thiếu · 57/60'));assert.ok(!pending.includes('Đủ mức báo cáo'));
+ delete r.searchEvidence;r.dailySearch.mobile.points=56;r.dailySearch.desktop.verified=false;
+ const uncertain=runner.accountMessage(r,'fixture@example.invalid','https://example.invalid');
+ assert.ok(!uncertain.includes('Đủ mức báo cáo'));assert.ok(uncertain.includes('Chưa xác minh'));
 });

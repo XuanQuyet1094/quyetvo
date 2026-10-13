@@ -22,7 +22,7 @@ test('six-account summary with pending mixed rewards fits the Telegram notificat
   const r={accountId:id,status:'completed',pointsEarned:155,initialBalance:10000,finalBalance:10155,tasks:{dailySet:'missing',appCheckIn:'unknown',readToEarn:'complete',mobileSearch:'unknown',desktopSearch:'unknown'},dailySearch:{mobile:{points:57,verified:true},desktop:{points:87,verified:true}},searchEvidence:{pending:{total:106},claimReceived:106}};
   jobs['account_'+id]={outputs:{result:JSON.stringify(r)}};
  }
- const text=runner.summaryMessage(jobs,env);assert.ok(text.length<=4096);assert.ok(text.includes('quota ❔'));assert.ok(text.includes('chưa phân bổ search'));assert.ok(!text.includes('57/60'));
+ const text=runner.summaryMessage(jobs,env);assert.ok(text.length<=4096);assert.ok(text.includes('Đủ mức báo cáo · 57 điểm'));assert.ok(text.includes('Đủ mức báo cáo · 87 điểm'));assert.ok(!text.includes('chưa phân bổ search'));assert.ok(!text.includes('57/60'));
 });
 test('worker persists sanitized quotas and mixed claim separately, ignoring another account or day',async t=>{
  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),runner=require('./rewards-runner.cjs');

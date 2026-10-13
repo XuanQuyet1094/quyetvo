@@ -1,0 +1,29 @@
+name: Stop obsolete Edge mobile verification
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/stop-edge-mobile-verification.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  stop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Stop only the obsolete isolated activation test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node - <<'NODE'
+          const response = await fetch('https://api.github.com/repos/' + process.env.GITHUB_REPOSITORY + '/actions/runs/38384108317/cancel', {
+            method: 'POST',
+            headers: {Authorization: 'Bearer ' + process.env.GH_TOKEN, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'},
+            signal: AbortSignal.timeout(20000)
+          });
+          if (![202,409].includes(response.status)) throw Error('Cancellation rejected: ' + response.status);
+          console.log('Obsolete activation test cancellation requested.');
+          NODE

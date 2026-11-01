@@ -37,6 +37,18 @@ async function fakeBot(source, options = {}) {
     return {code, result: JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8')), privateLog: fs.readFileSync(path.join(dir, 'rewards-private', 'account-2.log'), 'utf8')};
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 }
+test('v5 child events reach private Telegram reporting without a legacy recovery marker', async t => {
+ const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+ t.mock.method(Date,'now',()=>Date.parse(date+'T05:00:00Z'));
+ const event={version:2,user:'test@example.invalid',ts:date+'T05:00:01Z',platform:'MAIN',title:'ACCOUNT-END',level:'info',message:'synthetic-password',
+   data:{kind:'account',status:'partial',initialPoints:1000,currentBalance:1030,pointsKnown:true,durationSeconds:30,
+    completion:{completed:[{activity:'daily-check-in',status:'confirmed',reason:'checkin-complete',platform:'mobile'}],incomplete:[]}}};
+ const child=`const e=${JSON.stringify(event)};e.runId=process.env.REWARDS_RUN_ID;console.log('__REWARDS_EVENT__ '+JSON.stringify(e));`;
+ const r=await fakeBot(child,{env:{RUN_DATE:date}});
+ assert.equal(r.code,0);assert.equal(r.result.pointsEarned,30);assert.equal(r.result.tasks.appCheckIn,'complete');
+ assert.equal(r.result.tasks.mobileSearch,'unknown');assert.equal(r.result.searchQuota,'unknown');
+ assert.ok(!r.privateLog.includes('synthetic-password'));assert.ok(!r.privateLog.includes('test@example.invalid'));
+});
 test('successful child yields verified balance and Daily Set completion', async () => {
   const result = await fakeBot(`console.log('private: synthetic-password');
     console.log('DAILY_SET_VERIFICATION ' + JSON.stringify({state:'complete',total:3,completed:3,remaining:0}));

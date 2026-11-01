@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          ref: v4
+          ref: 2516d22da47fb964eb503d954dbdff4d46a5c715
           path: bot
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
@@ -46,7 +46,7 @@ jobs:
           quietBuild(process.env,[
             ['Dependencies','npm',['ci','--include=dev']],
             ['Build','npm',['run','build']],
-            ['App verification tests','node',['--test','scripts/main/appAuth.test.cjs','scripts/main/appReading.test.cjs','scripts/main/dailyTasks.test.cjs']]
+            ['v5 compatibility tests','node',['--test','scripts/main/automationCompatibility.test.cjs']]
           ]).catch(()=>{console.error('Protected verification failed; details remain private.');process.exitCode=1;});
           NODE
       - name: Preserve private verification details

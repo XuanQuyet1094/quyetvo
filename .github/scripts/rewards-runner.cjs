@@ -12,6 +12,7 @@ const taskStatus = require('./rewards-tasks.cjs');
 const searchLedger = require('./rewards-search-ledger.cjs');
 const searchEvidence = require('./rewards-search-evidence.cjs');
 const performance = require('./rewards-performance.cjs');
+const v5Events = require('./rewards-v5-events.cjs');
 
 const slots = [1, 2, 3, 4, 5, 6];
 const number = v => typeof v === 'number' && Number.isSafeInteger(v) ? v : null;
@@ -116,6 +117,8 @@ function childEnvironment(source, id) {
     [`ACCOUNT_${id}_PROXY_URL`]: 'socks5://127.0.0.1', [`ACCOUNT_${id}_PROXY_PORT`]: '1080',
     REWARDS_APP_AUTH_PROBE: source.RUN_MODE === 'app-auth-probe' ? 'true' : 'false',
     REWARDS_READING_CREDITED_THIS_RUN: '0',
+    REWARDS_CONTROL_EVENTS: '1',
+    REWARDS_RUN_ID: `${source.RUN_DATE}:${id}:${source.GITHUB_RUN_ID || 'local'}`,
     REWARDS_ACCOUNT_IDS: String(id),
     REWARDS_REPORT_DIR: path.join(source.RUNNER_TEMP, 'rewards-private')
   });
@@ -127,6 +130,12 @@ function configure(diagnosticOnly = false) {
   const dir = process.env.BOT_DIR;
   const cfg = read(path.join(dir, 'config.example.json'));
   if (!cfg) throw new Error('Missing config template');
+  const v5 = /^5\./.test(read(path.join(dir, 'package.json'))?.version || '');
+  if (v5) {
+    cfg.rewardsMode = 'browser';
+    // Preserve the production v4 task selection; upstream's example enables Visual Search.
+    cfg.workers.doVisualSearch = false;
+  }
   cfg.headless = true;
   cfg.clusters = 1;
   cfg.accountDelay = {min: '100sec', max: '180sec'};
@@ -201,6 +210,11 @@ function configure(diagnosticOnly = false) {
     cfg.experimental ||= {};
     cfg.experimental.edgeBrowsing = process.env.REWARDS_EDGE_ACTIVATION_ONLY === 'true';
   }
+  if (v5 && cfg.experimental) {
+    delete cfg.experimental.apiSearch;
+    delete cfg.experimental.apiSearchOnBing;
+    cfg.experimental.browserSearchApiReport = false;
+  }
   save(path.join(dir, 'config.json'), cfg);
   fs.writeFileSync(path.join(dir, '.env'), '', {mode: 0o600});
 }
@@ -210,6 +224,9 @@ async function runAccount(options = {}) {
   const id = accountSlot(source.ACCOUNT_SLOT);
   const diagnostic = {stage: 'STARTING', loginState: null, errors: [], dailySet: null};
   const diagnose = createDiagnostics(diagnostic);
+  const v5 = v5Events.collector({...source,
+    REWARDS_RUN_ID:`${source.RUN_DATE}:${id}:${source.GITHUB_RUN_ID || 'local'}`},id);
+  let v5Seen = false;
   const started = Date.now();
   let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
   let appAuthRejected = false, appCheckInAttempted = false;
@@ -222,6 +239,15 @@ async function runAccount(options = {}) {
   const requested=taskStatus.required(source.RUN_MODE,read(path.join(source.BOT_DIR,'config.example.json')));
   const quotaDiagnostics=[];
   function persist(code, signal) {
+    if (v5Seen) {
+      if (v5.state.result) last = v5.state.result;
+      Object.assign(searchPoints,v5.state.searchPoints);
+      verifiedTasks=taskStatus.merge(verifiedTasks,v5.state.tasks);
+      readingPoints=Math.max(readingPoints,v5.state.readingPoints);
+      readingUncertain ||= v5.state.readingUncertain;
+      appCheckInVerified ||= v5.state.tasks.appCheckIn==='complete';
+      if(v5.state.hasClaim){hasClaim=true;claimReceived=v5.state.claimReceived;}
+    }
     const result = last || {accountId: id, date: source.RUN_DATE || dateVN(), status: 'failed', initialBalance: null,
       finalBalance: null, pointsEarned: null, searchQuota: 'unknown', errorCode: 'NO_FINAL_RESULT'};
     if (source.RUN_MODE === 'app-auth-probe' && !appAuthVerified && !stopped) stopped = 'APP_AUTH_PROBE_FAILED';
@@ -308,6 +334,8 @@ async function runAccount(options = {}) {
         logTruncated = true;
       }
       // Raw bot lines stay off public Actions logs; only fixed-label diagnostics are reported.
+      const native = v5.accept(line);
+      if (native) { v5Seen=true; line=native.line; }
       diagnose(line);
       const timingAt=line.indexOf('REWARDS_STAGE_TIMING ');
       if(timingAt>=0)try {

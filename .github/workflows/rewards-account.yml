@@ -12,6 +12,9 @@ on:
       run_date:
         type: string
         required: true
+      source_ref:
+        type: string
+        default: 2516d22da47fb964eb503d954dbdff4d46a5c715
       debug_daily_set:
         type: boolean
         default: false
@@ -81,12 +84,13 @@ jobs:
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs claim
 
-      - name: Checkout private v4 source
+      - name: Checkout pinned private bot source
         if: ${{ steps.claim.outputs.run == 'true' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          ref: v4
+          # The specialized legacy transport probe remains read-only on its original implementation.
+          ref: ${{ inputs.run_mode == 'app-auth-probe' && 'v4' || inputs.source_ref }}
           path: bot
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false

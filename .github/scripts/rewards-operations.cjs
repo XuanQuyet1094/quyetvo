@@ -122,13 +122,16 @@ async function quietBuild(env = process.env, commands) {
   const file = path.join(folder,`setup-account-${id}.log`);
   fs.writeFileSync(file,'',{mode:0o600});
   const redact = require('./rewards-runner.cjs').redactLog;
+  const packagePath=path.join(env.BOT_DIR,'package.json');
+  const v5 = fs.existsSync(packagePath) && /^5\./.test(JSON.parse(fs.readFileSync(packagePath,'utf8')).version);
   let bytes = 0;
   for (const [label, command, args] of commands || [
     ['Dependencies','npm',['ci','--include=dev']],
     ['Browser','npx',['--no-install','patchright','install','--with-deps','chromium']],
     ['Build','npm',['run','build']],
-    ...(['app-test','app-auth-probe'].includes(env.RUN_MODE) ? [['App verification tests','node',['--test','scripts/main/appAuth.test.cjs']]] : []),
-    ...(env.RUN_MODE === 'diagnostic' ? [['Authentication tests','npm',['run','test:auth']]] : [])
+    ...(v5 ? [['v5 compatibility tests','node',['--test','scripts/main/automationCompatibility.test.cjs']]] : [
+      ...(['app-test','app-auth-probe'].includes(env.RUN_MODE) ? [['App verification tests','node',['--test','scripts/main/appAuth.test.cjs']]] : []),
+      ...(env.RUN_MODE === 'diagnostic' ? [['Authentication tests','npm',['run','test:auth']]] : [])])
   ]) {
     const child = spawn(command,args,{cwd:env.BOT_DIR,env,stdio:['ignore','pipe','pipe']});
     for (const stream of [child.stdout,child.stderr]) {

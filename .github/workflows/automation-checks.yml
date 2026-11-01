@@ -2,7 +2,7 @@ name: Automation checks
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, upgrade/v5-compat]
     paths: ['.github/scripts/**', '.github/workflows/**']
 permissions:
   contents: read

@@ -63,4 +63,8 @@ test('v5 authentication failures and unknown balances stay actionable, never fak
    initialPoints:0,currentBalance:0,durationSeconds:2}));
  assert.equal(c.state.result.errorCode,'AUTH_REQUIRED');assert.equal(c.state.result.pointsEarned,null);
  assert.equal(failure('Service rate limit HTTP 429'),'HTTP_429');
+ const partial=collector(env,1);
+ partial.accept(make({kind:'account',status:'partial',reason:'Service rejected account access (HTTP 401)',pointsKnown:false,
+   initialPoints:0,currentBalance:0,durationSeconds:2}));
+ assert.equal(partial.state.result.status,'failed');assert.equal(partial.state.result.errorCode,'AUTH_REQUIRED');
 });

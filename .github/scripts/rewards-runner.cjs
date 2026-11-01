@@ -234,6 +234,7 @@ async function runAccount(options = {}) {
   const searchBudget=read(path.join(source.RUNNER_TEMP,'rewards-private','search-budget.json'));
   const hasSearchBudget=searchBudget?.schema===1 && searchBudget.date===source.RUN_DATE && searchBudget.accountId===id;
   const searchPoints={mobile:0,desktop:0};
+  let finalDailySet = null;
   let observedSearch = searchEvidence.normalize(null), claimReceived = 0, hasClaim = false, pendingBefore = null;
   const stages=performance.collector();
   const requested=taskStatus.required(source.RUN_MODE,read(path.join(source.BOT_DIR,'config.example.json')));
@@ -243,6 +244,7 @@ async function runAccount(options = {}) {
       if (v5.state.result) last = v5.state.result;
       Object.assign(searchPoints,v5.state.searchPoints);
       verifiedTasks=taskStatus.merge(verifiedTasks,v5.state.tasks);
+      if(finalDailySet) verifiedTasks.dailySet=finalDailySet;
       readingPoints=Math.max(readingPoints,v5.state.readingPoints);
       readingUncertain ||= v5.state.readingUncertain;
       appCheckInVerified ||= v5.state.tasks.appCheckIn==='complete';
@@ -375,7 +377,11 @@ async function runAccount(options = {}) {
         try {
           const event = JSON.parse(line.slice(position + marker.length));
           if (event.date !== source.RUN_DATE) continue;
-          if (marker === 'DAILY_TASK_VERIFICATION ') verifiedTasks = taskStatus.merge(verifiedTasks, event.tasks);
+          if (marker === 'DAILY_TASK_VERIFICATION ') {
+            if (event.accountId !== undefined && event.accountId !== id) continue;
+            verifiedTasks = taskStatus.merge(verifiedTasks, event.tasks);
+            if (event.schema===1 && ['complete','missing'].includes(event.tasks?.dailySet)) finalDailySet=event.tasks.dailySet;
+          }
           else if (Number.isSafeInteger(event.points) && event.points >= readingPoints && event.points <= 30)
             readingPoints = event.points;
         } catch {}

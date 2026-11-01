@@ -62,6 +62,18 @@ test('successful child yields verified balance and Daily Set completion', async 
   assert.ok(!result.privateLog.includes('synthetic-password'));
   assert.ok(!result.privateLog.includes('JBSWY3DPEHPK3PXP'));
 });
+test('fresh final Daily Set verification overrides older v5 card completions', async t => {
+ const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+ t.mock.method(Date,'now',()=>Date.parse(date+'T05:00:00Z'));
+ const prefix={version:2,user:'test@example.invalid',ts:date+'T05:00:01Z',platform:'MAIN',title:'ACCOUNT-END',level:'info',message:'synthetic'};
+ const completed=[1,2,3].map(n=>({activity:'daily-set',offerId:`Global_DailySet_${date.replaceAll('-','')}_Child${n}`,status:'confirmed',reason:'offer-complete'}));
+ const data={kind:'account',status:'completed',initialPoints:1000,currentBalance:1030,pointsKnown:true,durationSeconds:30,completion:{completed}};
+ const source=`const e=${JSON.stringify(prefix)};e.runId=process.env.REWARDS_RUN_ID;
+ console.log('DAILY_TASK_VERIFICATION '+JSON.stringify({schema:1,date:${JSON.stringify(date)},accountId:2,tasks:{dailySet:'missing'}}));
+ e.data=${JSON.stringify(data)};console.log('__REWARDS_EVENT__ '+JSON.stringify(e));`;
+ const r=await fakeBot(source,{env:{RUN_DATE:date}});
+ assert.equal(r.result.tasks.dailySet,'missing');assert.equal(r.result.completion.status,'incomplete');
+});
 test('exit zero with failed recovery result still fails', async () => {
   const result = await fakeBot(`console.log('RECOVERY_ACCOUNT_RESULT ' + JSON.stringify(${JSON.stringify({...fixture, status: 'failed', pointsEarned: null, errorCode: 'FLOW_FAILED'})}));`);
   assert.equal(result.code, 1);

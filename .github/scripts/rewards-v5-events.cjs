@@ -71,7 +71,8 @@ function collector(env, id) {
       // Final summaries can restore verified evidence even when earlier log entries were filtered.
       for (const list of ['completed','incomplete','unavailable','notApplicable'])
         for (const item of data.completion?.[list] || []) activity(item,item.platform);
-      const fatal=['failed','skipped','cancelled'].includes(data.status);
+      const fatal=['failed','skipped','cancelled'].includes(data.status) || data.status==='partial' &&
+        /HTTP 40[13]|TOTP|password|authenticator|sign.in|login|service rate limit/i.test(String(data.reason||''));
       const known=data.pointsKnown === true && metric(data.initialPoints)!==null && metric(data.currentBalance)!==null;
       const gain=known?data.currentBalance-data.initialPoints:null;
       state.result={schema:1,accountId:id,date:env.RUN_DATE,status:fatal?'failed':'completed',finished:true,

@@ -11,7 +11,8 @@ function lateReconcile(date, mode, env = process.env) {
 }
 function deadline(date, mode, env = process.env) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
-  return Date.parse(date + (mode === 'app-read-test' || lateReconcile(date, mode, env) ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
+  // Login-only diagnosis has no earning workers; it may finish before the same-day midnight.
+  return Date.parse(date + (mode === 'diagnostic' || mode === 'app-read-test' || lateReconcile(date, mode, env) ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
 }
 function canStart(date, now = Date.now(), mode, env = process.env) {
   return date === dateVN(now) && deadline(date, mode, env) - now >= (lateReconcile(date, mode, env) ? 10 : mode === 'app-read-test' ? 5 : mode === 'reconcile' ? 20 : 90) * 60000;

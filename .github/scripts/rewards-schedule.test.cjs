@@ -32,6 +32,13 @@ test('manual runs preserve selected mode but cannot bypass date or daily deadlin
   assert.equal(planRun(manual, '2026-10-06T04:00:00Z', at('21:01:00')).run, false);
   assert.throws(() => planRun(env('0 8 * * *'), '2026-10-06T08:00:00Z', at('15:00:00')));
 });
+test('late login-only diagnosis does not extend any earning window or scheduled mode', () => {
+  assert.equal(deadline('2026-10-06', 'diagnostic'), at('23:59:30'));
+  for (const mode of ['morning', 'retry', 'reconcile', 'test', 'app-test'])
+    assert.equal(deadline('2026-10-06', mode), at('22:30:00'));
+  assert.throws(() => planRun({GITHUB_EVENT_NAME: 'workflow_dispatch', INPUT_MODE: 'diagnostic'},
+    '2026-10-06T15:42:00Z', at('22:42:00')), /Invalid mode/);
+});
 test('daily-window expiry cannot qualify for another earning attempt', () => {
   assert.equal(require('./rewards-state.cjs').retryable({status: 'failed', errorCode: 'DAILY_WINDOW_EXPIRED'}), false);
   assert.equal(require('./rewards-state.cjs').retryable({status: 'failed', errorCode: 'DAILY_WINDOW_EXPIRED',

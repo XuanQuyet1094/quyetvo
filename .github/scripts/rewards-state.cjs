@@ -12,14 +12,14 @@ function privateRepository() {
 }
 const BRANCH = 'rewards-state';
 const today = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-const transient = new Set(['NETWORK_TIMEOUT', 'ACCOUNT_TIMEOUT', 'HTTP_408', 'HTTP_425', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504']);
+const transient = new Set(['LOGIN_TRANSIENT_ERROR', 'NETWORK_TIMEOUT', 'ACCOUNT_TIMEOUT', 'HTTP_408', 'HTTP_425', 'HTTP_429', 'HTTP_500', 'HTTP_502', 'HTTP_503', 'HTTP_504']);
 const network = new Set(['ERR_EMPTY_RESPONSE', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_SOCKS_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED', 'ERR_NAME_NOT_RESOLVED', 'ERR_CONNECTION_RESET']);
-const blocked = new Set(['DAILY_WINDOW_EXPIRED', 'AUTH_REQUIRED', 'ACCOUNT_LOCKED', 'BOT_WARNING', 'PASSWORD_NOT_CONFIGURED', 'MICROSOFT_LOGIN_ERROR', 'MICROSOFT_LOGIN_UNKNOWN_ERROR',
+const blocked = new Set(['DAILY_WINDOW_EXPIRED', 'AUTH_REQUIRED', 'AUTH_METHOD_UNAVAILABLE', 'RECOVERY_EMAIL_REQUIRED', 'ACCOUNT_LOCKED', 'BOT_WARNING', 'PASSWORD_NOT_CONFIGURED', 'MICROSOFT_LOGIN_ERROR', 'MICROSOFT_LOGIN_UNKNOWN_ERROR',
   'TOTP_METHOD_SELECTION_FAILED', 'TOTP_SECRET_INVALID', 'TOTP_SECRET_MISSING',
   'TOTP_REJECTED', 'TOTP_INPUT_MISSING', 'TOTP_SUBMIT_FAILED', 'TOTP_NOT_ADVANCED']);
 const diagnosticErrors = new Set([...network, ...blocked, 'TRANSIENT_LOGIN_ALERT',
   'BROWSER_EXECUTABLE_MISSING', 'BROWSER_LIBRARY_MISSING', 'DISPLAY_MISSING',
-  'BROWSER_OR_CONTEXT_CLOSED', 'TIMEOUT', 'CHROMEWEBDATA_ERROR', 'UNCLASSIFIED_ERROR', 'TOTP_NOT_OFFERED']);
+  'BROWSER_OR_CONTEXT_CLOSED', 'TIMEOUT', 'LOGIN_TRANSIENT_ERROR', 'CHROMEWEBDATA_ERROR', 'UNCLASSIFIED_ERROR', 'TOTP_NOT_OFFERED']);
 const diagnosticStages = new Set(['STARTING', 'BROWSER', 'SESSION', 'LOGIN',
   'LOGIN-TOTP', 'LOGIN-ENTER-EMAIL', 'LOGIN-ENTER-PASSWORD', 'DAILY-SET', 'READ-TO-EARN',
   'SEARCH-MANAGER', 'SEARCH-BING']);
@@ -160,12 +160,16 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
+  const selection = await require('./rewards-login-review.cjs').selectionView(state, ctx, async entry => {
+    const file = await api(`/contents/logs/${ctx.date}/account-${ctx.slot}-run-${entry.runId}-attempt-${entry.runAttempt}.log?ref=${BRANCH}`, {}, true);
+    return file ? Buffer.from(file.content, 'base64').toString('utf8') : '';
+  });
   if (['retry', 'reconcile'].includes(ctx.mode)) {
     state.dailyReview = await dailyPointsReview(state, ctx);
   }
-  if (['morning','retry','reconcile'].includes(ctx.mode) && !state[ctx.mode] && !hasBlockedAttempt(state))
+  if (['morning','retry','reconcile'].includes(ctx.mode) && !state[ctx.mode] && !hasBlockedAttempt(selection))
     state.searchReview = await dailySearchReview(state,ctx);
-  if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(state).some(entry =>
+  if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(selection).some(entry =>
       entry && typeof entry === 'object' && (entry.status === 'running' ||
       [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label)))))) {
     output('run', 'false'); console.log('Skipped: an attempt is active, blocked, or already reserved.'); return;
@@ -175,7 +179,7 @@ async function claim() {
   if ((ctx.mode === 'app-auth-probe' && (ctx.slot !== 1 || (state['app-auth-probe'] &&
         (state['app-auth-probe'].status === 'running' || state['app-test']?.checkInVerified === true ||
          (state['app-auth-probe'].history || []).length >= 5)))) ||
-      (ctx.mode === 'retry' && !eligible(state, ctx.date, ctx.slot)) ||
+      (ctx.mode === 'retry' && !eligible(selection, ctx.date, ctx.slot)) ||
       (ctx.mode === 'morning' && state.morning) ||
       (ctx.mode === 'test' && (ctx.slot !== 1 || state.test)) ||
       (ctx.mode === 'app-read-test' && (![1,3].includes(ctx.slot) || (state['app-read-test'] &&
@@ -320,6 +324,7 @@ function safeReport(value, slot, date) {
   }
   const metric = (v, nonnegative = false) => Number.isSafeInteger(v) && (!nonnegative || v >= 0) ? v : null;
   return {accountId: slot, date, status: value.status,
+    nativeStatus: ['completed','partial','failed','skipped','cancelled'].includes(value.nativeStatus) ? value.nativeStatus : null,
     appCheckIn: ['verified','auth_rejected','unverified','not_requested','unknown'].includes(value.appCheckIn) ? value.appCheckIn : 'unknown',
     pointsEarned: metric(value.pointsEarned),
     initialBalance: metric(value.initialBalance, true),

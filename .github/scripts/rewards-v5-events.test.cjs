@@ -20,6 +20,7 @@ test('v5 separates process completion, verified points and incomplete tasks',()=
  c.accept(make({kind:'account',status:'partial',initialPoints:1000,currentBalance:1147,pointsGained:147,
    pointsKnown:true,durationSeconds:30,completion:{incomplete:[]}}));
  assert.equal(c.state.result.status,'completed');assert.equal(c.state.result.pointsEarned,147);
+ assert.equal(c.state.result.nativeStatus,'partial');
  assert.equal(c.state.tasks.mobileSearch,'complete');assert.equal(c.state.tasks.desktopSearch,'missing');
  assert.deepEqual(c.state.searchPoints,{mobile:60,desktop:87});assert.equal(c.state.tasks.dailySet,'unknown');
 });
@@ -67,4 +68,18 @@ test('v5 authentication failures and unknown balances stay actionable, never fak
  partial.accept(make({kind:'account',status:'partial',reason:'Service rejected account access (HTTP 401)',pointsKnown:false,
    initialPoints:0,currentBalance:0,durationSeconds:2}));
  assert.equal(partial.state.result.status,'failed');assert.equal(partial.state.result.errorCode,'AUTH_REQUIRED');
+});
+test('browser fallback completion is a verified reading task, not an unknown label',()=>{
+ const c=collector(env,1);
+ c.accept(make(act('read-to-earn','browser-fallback-read-to-earn-complete',{pointsGained:30}),'MOBILE'));
+ assert.equal(c.state.tasks.readToEarn,'complete');assert.equal(c.state.readingPoints,30);
+});
+test('technical login timeouts are retryable labels while genuine authentication stays blocked',()=>{
+ assert.equal(failure('Login failed or aborted at state: EMAIL_INPUT'),'LOGIN_TRANSIENT_ERROR');
+ assert.equal(failure('LOGIN_TRANSIENT_ERROR: password form did not stabilize'),'LOGIN_TRANSIENT_ERROR');
+ assert.equal(failure('login request timed out'),'NETWORK_TIMEOUT');
+ assert.equal(failure('AUTH_METHOD_UNAVAILABLE: email OTP needs input'),'AUTH_METHOD_UNAVAILABLE');
+ assert.equal(failure('RECOVERY_EMAIL_REQUIRED: configured email missing'),'RECOVERY_EMAIL_REQUIRED');
+ assert.equal(failure('Microsoft login error: wrong recovery email'),'AUTH_REQUIRED');
+ assert.equal(failure('TOTP challenge timeout'),'AUTH_REQUIRED');
 });

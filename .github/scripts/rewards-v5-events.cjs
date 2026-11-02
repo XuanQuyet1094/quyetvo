@@ -7,9 +7,13 @@ function failure(reason) {
   const text = String(reason || '');
   if (/locked|serviceAbuse/i.test(text)) return 'ACCOUNT_LOCKED';
   if (/Fraud_UserWarning|bot.score/i.test(text)) return 'BOT_WARNING';
-  if (/TOTP|OTP|2FA|password|authenticator|interactive|sign.in|login|HTTP 40[13]/i.test(text)) return 'AUTH_REQUIRED';
+  if (/RECOVERY_EMAIL_REQUIRED/.test(text)) return 'RECOVERY_EMAIL_REQUIRED';
+  if (/AUTH_METHOD_UNAVAILABLE/.test(text)) return 'AUTH_METHOD_UNAVAILABLE';
+  if (/LOGIN_TRANSIENT_ERROR|Login failed or aborted at state: (?:EMAIL_INPUT|PASSWORD_INPUT)\b/.test(text)) return 'LOGIN_TRANSIENT_ERROR';
+  if (/TOTP|OTP|2FA|authenticator|interactive|HTTP 40[13]|Microsoft login error|SIGN_IN_METHOD_PICKER|recovery email/i.test(text)) return 'AUTH_REQUIRED';
   if (/429|rate.limit/i.test(text)) return 'HTTP_429';
-  if (/timeout|timed.out|ERR_|ECONN|ENET|fetch failed/i.test(text)) return 'NETWORK_TIMEOUT';
+  if (/timeout|timed.out|detached|ERR_|ECONN|ENET|fetch failed/i.test(text)) return 'NETWORK_TIMEOUT';
+  if (/password|sign.in|login/i.test(text)) return 'AUTH_REQUIRED';
   if (/dashboard|snapshot|render/i.test(text)) return 'DASHBOARD_UNAVAILABLE';
   return 'FLOW_FAILED';
 }
@@ -29,7 +33,7 @@ function collector(env, id) {
     if (data.activity === 'daily-check-in') state.tasks.appCheckIn = complete ? 'complete' : data.status === 'failed' ? 'missing' : 'unknown';
     if (data.activity === 'read-to-earn') {
       const budgetComplete=data.status==='skipped' && data.reason==='automation-reading-budget-complete';
-      state.tasks.readToEarn = (complete || budgetComplete) && /^(?:read-to-earn-(?:browser-)?complete|already-complete|automation-reading-budget-complete)$/.test(data.reason)
+      state.tasks.readToEarn = (complete || budgetComplete) && /^(?:read-to-earn-(?:browser-)?complete|browser-fallback-read-to-earn-complete|already-complete|automation-reading-budget-complete)$/.test(data.reason)
         ? 'complete' : /progress-unchanged|quota-incomplete/.test(data.reason) ? 'missing' : 'unknown';
       if (data.pointsKnown === true && metric(data.pointsGained) !== null)
         state.readingPoints = Math.max(state.readingPoints, Math.min(30,data.pointsGained));
@@ -76,6 +80,7 @@ function collector(env, id) {
       const known=data.pointsKnown === true && metric(data.initialPoints)!==null && metric(data.currentBalance)!==null;
       const gain=known?data.currentBalance-data.initialPoints:null;
       state.result={schema:1,accountId:id,date:env.RUN_DATE,status:fatal?'failed':'completed',finished:true,
+        nativeStatus:['completed','partial','failed','skipped','cancelled'].includes(data.status)?data.status:null,
         initialBalance:known?data.initialPoints:null,finalBalance:known?data.currentBalance:null,
         pointsEarned:gain,searchQuota:'unknown',durationSeconds:metric(Math.round(data.durationSeconds)),
         errorCode:fatal?(data.status==='cancelled'?'CANCELLED':failure(data.reason)):null};

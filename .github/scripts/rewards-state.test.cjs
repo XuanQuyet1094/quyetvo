@@ -28,6 +28,14 @@ test('authentication and lock errors override transient errors', () => {
     assert.equal(retryable({status:'failed',errorCode:'ACCOUNT_TIMEOUT',diagnostic:{errors:[label]}}),false);
   }
 });
+test('bounded form re-detection errors qualify for one retry, interactive proof errors never do',()=>{
+ assert.equal(retryable({status:'failed',errorCode:'LOGIN_TRANSIENT_ERROR'}),true);
+ for(const errorCode of ['AUTH_METHOD_UNAVAILABLE','RECOVERY_EMAIL_REQUIRED'])
+   assert.equal(retryable({status:'failed',errorCode,diagnostic:{errors:['TIMEOUT']}}),false);
+ const state={schema:1,date:'2026-11-02',accountId:3,morning:{status:'failed',retryable:true,errorCode:'LOGIN_TRANSIENT_ERROR'}};
+ assert.equal(eligible(state,state.date,3),true);
+ assert.equal(eligible({...state,retry:{status:'failed'}},state.date,3),false);
+});
 test('classified browser network errors qualify', () => {
   assert.equal(retryable({status:'failed',errorCode:'FLOW_FAILED',diagnostic:{errors:['ERR_PROXY_CONNECTION_FAILED']}}),true);
 });

@@ -15,6 +15,12 @@ test('unknown points stay unknown and another account cannot overwrite the resul
   assert.equal(api.cleanResult(fixture, 1), null);
   assert.equal(api.cleanResult({...fixture, pointsEarned: null}, 2).pointsEarned, null);
 });
+test('v5 partial reports cannot turn legacy 57/87 receipts into completed search quotas',()=>{
+ const r={accountId:1,date:'2026-11-02',status:'completed',nativeStatus:'partial',pointsEarned:144,
+   tasks:{mobileSearch:'unknown',desktopSearch:'unknown'},dailySearch:{mobile:{points:57,verified:true},desktop:{points:87,verified:true}}};
+ const message=api.accountMessage(r,'fixture@example.invalid','https://example.invalid');
+ assert.ok(!message.includes('Đủ mức báo cáo'));assert.ok(message.includes('Còn hạng mục chưa hoàn tất/xác minh'));
+});
 
 test('only selected credentials enter the bot; browser and HTTP use SOCKS5', () => {
   const env = api.childEnvironment({ACCOUNT_EMAIL: 'test@example.invalid', ACCOUNT_PASSWORD: 'synthetic',
@@ -46,6 +52,8 @@ test('v5 child events reach private Telegram reporting without a legacy recovery
  const child=`const e=${JSON.stringify(event)};e.runId=process.env.REWARDS_RUN_ID;console.log('__REWARDS_EVENT__ '+JSON.stringify(e));`;
  const r=await fakeBot(child,{env:{RUN_DATE:date}});
  assert.equal(r.code,0);assert.equal(r.result.pointsEarned,30);assert.equal(r.result.tasks.appCheckIn,'complete');
+ assert.equal(r.result.nativeStatus,'partial');
+ assert.ok(api.accountMessage(r.result,'fixture@example.invalid','https://example.invalid').includes('Còn hạng mục chưa hoàn tất/xác minh'));
  assert.equal(r.result.tasks.mobileSearch,'unknown');assert.equal(r.result.searchQuota,'unknown');
  assert.ok(!r.privateLog.includes('synthetic-password'));assert.ok(!r.privateLog.includes('test@example.invalid'));
 });

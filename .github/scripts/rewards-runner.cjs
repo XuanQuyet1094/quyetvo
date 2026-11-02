@@ -21,7 +21,7 @@ const html = v => String(v).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', 
 const fmt = v => number(v) === null ? 'Chưa xác minh' : v.toLocaleString('vi-VN');
 const gain = v => number(v) === null ? 'Chưa xác minh' : (v >= 0 ? '+' : '') + fmt(v);
 const dateVN = () => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}).format(new Date());
-const errors = new Set(['ACCOUNT_LOCKED', 'BOT_WARNING', 'AUTH_REQUIRED', 'NETWORK_TIMEOUT',
+const errors = new Set(['ACCOUNT_LOCKED', 'BOT_WARNING', 'AUTH_REQUIRED', 'AUTH_METHOD_UNAVAILABLE', 'RECOVERY_EMAIL_REQUIRED', 'LOGIN_TRANSIENT_ERROR', 'NETWORK_TIMEOUT',
   'DASHBOARD_UNAVAILABLE', 'FLOW_FAILED', 'BALANCE_UNVERIFIED', 'STALE_RUN_DATE',
   'INVALID_ACCOUNT_SELECTION', 'MISSING_ACCOUNT_EMAIL', 'PROCESS_FAILED', 'NO_FINAL_RESULT',
   'ACCOUNT_TIMEOUT', 'CANCELLED', 'SETUP_FAILED', 'DAILY_WINDOW_EXPIRED', 'APP_CHECKIN_UNVERIFIED', 'APP_AUTH_PROBE_FAILED']);
@@ -231,6 +231,9 @@ async function runAccount(options = {}) {
   let last = null, stopped = null, appCheckInVerified = false, appAuthVerified = false;
   let appAuthRejected = false, appCheckInAttempted = false;
   let verifiedTasks = taskStatus.tasks(), readingPoints = 0, readingUncertain = false;
+  const readingBudget = read(path.join(source.RUNNER_TEMP,'rewards-private','reading-budget.json'));
+  if (readingBudget?.date === source.RUN_DATE && readingBudget?.accountId === id &&
+      readingBudget?.verified === true && readingBudget?.points === 0) verifiedTasks.readToEarn = 'complete';
   const searchBudget=read(path.join(source.RUNNER_TEMP,'rewards-private','search-budget.json'));
   const hasSearchBudget=searchBudget?.schema===1 && searchBudget.date===source.RUN_DATE && searchBudget.accountId===id;
   const searchPoints={mobile:0,desktop:0};
@@ -436,7 +439,7 @@ function reportTasks(r) {
   const e = searchEvidence.normalize(r.searchEvidence);
   for (const [platform, goal] of [['mobile', 57], ['desktop', 87]]) {
     const receipt = r.dailySearch?.[platform];
-    if (t[platform + 'Search'] === 'unknown' && !e[platform] && !e.shared && !e.limited &&
+    if (!r.nativeStatus && t[platform + 'Search'] === 'unknown' && !e[platform] && !e.shared && !e.limited &&
         searchEvidence.metric(receipt?.points) !== null && receipt.verified !== false && receipt.points >= goal)
       t[platform + 'Search'] = 'complete';
   }
@@ -483,7 +486,7 @@ function accountMessage(r, email, url) {
     `<b>${process.env.RUN_MODE === 'reconcile' ? 'Kiểm tra và chạy bù · ' : process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
-    `${r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${statusText[r.status] || 'Chưa có kết quả'}`,
+    `${r.nativeStatus === 'partial' ? '⚠️' : r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${r.nativeStatus === 'partial' ? 'Đã kết thúc lượt · Còn hạng mục chưa hoàn tất/xác minh' : statusText[r.status] || 'Chưa có kết quả'}`,
     `📋 <b>Hoàn tất nhiệm vụ:</b> ${reportLabel(r)}`,
     `💎 <b>Điểm trong lượt:</b> ${gain(r.pointsEarned)}`,
     `💰 <b>Số dư:</b> ${fmt(r.initialBalance)} → ${fmt(r.finalBalance)}`,
@@ -527,7 +530,7 @@ async function prepareReport() {
   // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
     initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn,
-    tasks: r.tasks, requiredTasks:r.requiredTasks, completion:r.completion, timings:r.timings, quotaDiagnostics:r.quotaDiagnostics,
+    nativeStatus:r.nativeStatus, tasks: r.tasks, requiredTasks:r.requiredTasks, completion:r.completion, timings:r.timings, quotaDiagnostics:r.quotaDiagnostics,
     readingPoints: r.readingPoints, searchPoints:r.searchPoints, dailySearch:r.dailySearch, searchEvidence:r.searchEvidence};
   await require('./rewards-state.cjs').savePrivateReport(output);
   await require('./rewards-operations.cjs').enqueue(`account-${id}`,

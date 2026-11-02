@@ -88,13 +88,15 @@ function cleanResult(r, id) {
 }
 function childEnvironment(source, id) {
   const env = {...source};
-  if (['morning','retry','reconcile'].includes(source.RUN_MODE)) {
+  const benchmark = source.RUN_MODE === 'api-benchmark';
+  if (benchmark && !require('./rewards-api-benchmark.cjs').authorized(source.RUN_DATE, source.RUN_MODE, source)) throw new Error('Invalid benchmark scope');
+  if (['morning','retry','reconcile','api-benchmark'].includes(source.RUN_MODE)) {
     const budget=read(path.join(source.RUNNER_TEMP,'rewards-private','search-budget.json'));
     if (!budget || budget.schema!==1 || budget.date!==source.RUN_DATE || budget.accountId!==id)
       throw new Error('Missing or invalid daily search budget');
     env.REWARDS_SEARCH_LEDGER=JSON.stringify(budget);
   } else delete env.REWARDS_SEARCH_LEDGER;
-  if (['morning', 'retry', 'reconcile', 'app-read-test'].includes(source.RUN_MODE)) {
+  if (['morning', 'retry', 'reconcile', 'app-read-test', 'api-benchmark'].includes(source.RUN_MODE)) {
     const budget = read(path.join(source.RUNNER_TEMP, 'rewards-private', 'reading-budget.json'));
     if (!budget && source.RUN_MODE === 'app-read-test') throw new Error('Missing private reading budget');
     if (budget) {
@@ -127,6 +129,8 @@ function childEnvironment(source, id) {
 function configure(diagnosticOnly = false) {
   diagnosticOnly = diagnosticOnly || process.env.RUN_MODE === 'app-auth-probe';
   accountSlot();
+  if (process.env.RUN_MODE === 'api-benchmark' && !require('./rewards-api-benchmark.cjs').authorized(process.env.RUN_DATE,process.env.RUN_MODE)) throw new Error('Invalid benchmark scope');
+  const productionMode = process.env.RUN_MODE === 'api-benchmark' ? 'morning' : process.env.RUN_MODE;
   const dir = process.env.BOT_DIR;
   const cfg = read(path.join(dir, 'config.example.json'));
   if (!cfg) throw new Error('Missing config template');
@@ -142,14 +146,14 @@ function configure(diagnosticOnly = false) {
   cfg.errorDiagnostics = false;
   cfg.debugLogs = false;
   cfg.sessionPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', 'sessions');
-  if (['morning','retry','reconcile'].includes(process.env.RUN_MODE)) {
+  if (['morning','retry','reconcile'].includes(productionMode)) {
     cfg.searchSettings ||= {};
     cfg.searchSettings.parallelSearching=false;
     cfg.searchSettings.runOnZeroPoints=false;
     if (cfg.experimental) {
       cfg.experimental.apiSearch=false;
       cfg.experimental.apiSearchOnBing=false;
-      cfg.experimental.edgeBrowsing=process.env.RUN_MODE === 'morning';
+      cfg.experimental.edgeBrowsing=productionMode === 'morning';
     }
     // Keep configured search workers available until the bot reads Microsoft quota.
     // Observed balance receipts alone cannot disable a platform at a fixed goal.
@@ -320,7 +324,7 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? (schedule.lateReconcile(source.RUN_DATE, source.RUN_MODE, source) ? 15 : source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
+  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'api-benchmark' ? 30 : schedule.lateReconcile(source.RUN_DATE, source.RUN_MODE, source) ? 15 : source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
   const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
     Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
@@ -483,7 +487,7 @@ function accountMessage(r, email, url) {
     ? `${daily.completed}/${daily.total} · ${daily.state === 'complete' ? 'Hoàn tất' : 'Chưa hoàn tất'}` : 'Chưa xác minh';
   const lines = [
     '🏆 <b>MICROSOFT REWARDS</b>',
-    `<b>${process.env.RUN_MODE === 'reconcile' ? 'Kiểm tra và chạy bù · ' : process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
+    `<b>${process.env.RUN_MODE === 'api-benchmark' ? 'Đo thời gian API · ' : process.env.RUN_MODE === 'reconcile' ? 'Kiểm tra và chạy bù · ' : process.env.RUN_MODE === 'test' ? 'Kiểm tra Daily Set · ' : process.env.RUN_MODE === 'retry' ? 'Chạy dự phòng · ' : ''}Báo cáo tài khoản ${r.accountId}/6</b>`,
     `👤 <code>${html(email || `Tài khoản ${r.accountId}`)}</code>`,
     `📅 ${html(r.date)} · Giờ Việt Nam`, '',
     `${r.nativeStatus === 'partial' ? '⚠️' : r.status === 'completed' ? '✅' : r.status === 'needs_action' ? '⚠️' : '❌'} <b>Trạng thái:</b> ${r.nativeStatus === 'partial' ? 'Đã kết thúc lượt · Còn hạng mục chưa hoàn tất/xác minh' : statusText[r.status] || 'Chưa có kết quả'}`,
@@ -497,6 +501,8 @@ function accountMessage(r, email, url) {
       `🔎 <b>Tìm kiếm:</b> ${quotaText[r.searchQuota] || 'Chưa xác minh'}`
     ]),
   ];
+  if (process.env.RUN_MODE === 'api-benchmark' && Number.isSafeInteger(r.durationSeconds))
+    lines.push(`⏱️ <b>Thời gian bot API:</b> ${(r.durationSeconds/60).toFixed(1)} phút · Không tính chuẩn bị runner`);
   if (r.errorCode) lines.push(`⚠️ <b>Mã lỗi:</b> <code>${html(errorLabel(r.errorCode))}</code>`);
   if (r.appCheckIn === 'auth_rejected') lines.push('⚠️ <b>API App:</b> Chưa thực hiện · API từ chối 401');
   if (r.status !== 'completed' && r.diagnostic) {

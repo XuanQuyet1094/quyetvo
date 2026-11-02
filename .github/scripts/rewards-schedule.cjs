@@ -11,6 +11,7 @@ function lateReconcile(date, mode, env = process.env) {
 }
 function deadline(date, mode, env = process.env) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Invalid run date');
+  if (require('./rewards-api-benchmark.cjs').authorized(date, mode, env)) return require('./rewards-api-benchmark.cjs').END;
   // Login-only diagnosis has no earning workers; it may finish before the same-day midnight.
   return Date.parse(date + (mode === 'diagnostic' || mode === 'app-read-test' || lateReconcile(date, mode, env) ? 'T23:59:30+07:00' : 'T22:30:00+07:00'));
 }

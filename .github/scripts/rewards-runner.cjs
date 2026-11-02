@@ -132,7 +132,7 @@ function configure(diagnosticOnly = false) {
   if (!cfg) throw new Error('Missing config template');
   const v5 = /^5\./.test(read(path.join(dir, 'package.json'))?.version || '');
   if (v5) {
-    cfg.rewardsMode = 'browser';
+    cfg.rewardsMode = 'api';
     // Preserve the production v4 task selection; upstream's example enables Visual Search.
     cfg.workers.doVisualSearch = false;
   }

@@ -14,7 +14,7 @@ on:
         required: true
       source_ref:
         type: string
-        default: aacf069708b4eb618591f086cdba8608811ab891
+        default: f807cd4abfed704c15c51d0241bfd67aee2f219d
       debug_daily_set:
         type: boolean
         default: false

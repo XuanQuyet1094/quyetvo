@@ -19,10 +19,13 @@ function failure(reason) {
 }
 function collector(env, id) {
   const state = {tasks:tasks.tasks(), searchPoints:{mobile:null,desktop:null}, readingPoints:0, readingUncertain:false,
-    claimReceived:0, hasClaim:false, result:null};
+    claimReceived:0, hasClaim:false, result:null, searchExecution:{mobile:'unknown',desktop:'unknown'}};
   const daily = new Map(), claims = new Map();
   function activity(data, platform) {
     const complete = data.status === 'confirmed' || data.status === 'skipped' && /^(?:already-complete|offer-already-complete)$/.test(data.reason);
+    const quotaPlatform=/^(mobile|desktop)-search-quota$/.exec(data.activity||'')?.[1];
+    if(quotaPlatform && data.reason==='quota-unavailable' && state.searchExecution[quotaPlatform]==='unknown')
+      state.searchExecution[quotaPlatform]='quota_unavailable';
     if (data.activity === 'daily-set' && typeof data.offerId === 'string') {
       const date = env.RUN_DATE.replaceAll('-', '');
       if (data.offerId.includes(date)) {
@@ -42,6 +45,7 @@ function collector(env, id) {
     if (data.activity === 'search' && ['mobile','desktop'].includes(platform)) {
       state.tasks[platform+'Search'] = complete && /^(?:quota-complete|already-complete)$/.test(data.reason)
         ? 'complete' : data.reason === 'quota-incomplete' ? 'missing' : 'unknown';
+      if(state.tasks[platform+'Search']==='complete') state.searchExecution[platform]='complete';
       if (data.pointsKnown === true && metric(data.pointsGained) !== null)
         state.searchPoints[platform] = Math.max(state.searchPoints[platform] || 0,data.pointsGained);
     }
@@ -61,6 +65,8 @@ function collector(env, id) {
       !Number.isFinite(Date.parse(event.ts)) || vnDate(event.ts) !== env.RUN_DATE ||
       !['MAIN','MOBILE','DESKTOP'].includes(event.platform)) return null;
     const data=event.data, platform=event.platform.toLowerCase();
+    if(event.title==='SEARCH-BING' && /^Searching \| search=\d+/.test(String(event.message||'')) &&
+      ['mobile','desktop'].includes(platform)) state.searchExecution[platform]='attempted';
     if (data?.kind === 'activity') activity(data,platform);
     if (data?.kind === 'account-info' && Array.isArray(data.streaks)) {
       for (const streak of data.streaks) {

@@ -1,5 +1,9 @@
 'use strict';
 const metric = v => Number.isSafeInteger(v) && v >= 0 && v <= 100000 ? v : null;
+function execution(value) {
+  return Object.fromEntries(['mobile','desktop'].map(p=>[p,
+    ['quota_unavailable','attempted','complete'].includes(value?.[p]) ? value[p] : 'unknown']));
+}
 function quota(v) {
   return metric(v?.earned) !== null && metric(v?.max) !== null && v.max > 0 && v.max <= 10000 &&
     v.earned <= v.max && ['api','ui'].includes(v.source) ? {earned:v.earned,max:v.max,source:v.source} : null;
@@ -60,4 +64,4 @@ function lines(value,receipts,compact=false) {
   if(!e.mobile || !e.desktop) out.push('ℹ️ Điểm search ghi nhận là phần tăng số dư quan sát được; quota lấy từ Microsoft, không mặc định 60/90.');
   return out;
 }
-module.exports={metric,quota,normalize,applyTasks,lines,diagnostic,merge};
+module.exports={metric,quota,normalize,applyTasks,lines,diagnostic,merge,execution};

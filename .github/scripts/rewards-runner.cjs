@@ -279,6 +279,7 @@ async function runAccount(options = {}) {
     result.completion=taskStatus.completion(result.tasks,requested);
     result.timings=stages.snapshot();
     result.quotaDiagnostics=[...quotaDiagnostics];
+    if(v5Seen) result.searchExecution=searchEvidence.execution(v5.state.searchExecution);
     if (['mobileSearch','desktopSearch'].every(k=>result.tasks[k]==='complete')) result.searchQuota='complete';
     else result.searchQuota='unknown';
     result.readingPoints = readingPoints === 30 ? 30 :
@@ -467,6 +468,15 @@ function reportLines(r) {
   for (const p of ['mobile', 'desktop']) {
     const q = e[p] || e.shared, n = searchEvidence.metric(r.dailySearch?.[p]?.points);
     const label = p === 'mobile' ? '📱 <b>Mobile search:</b> ' : '🖥️ <b>Desktop search:</b> ';
+    const execution=searchEvidence.execution(r.searchExecution)[p];
+    if(!q && execution==='quota_unavailable' && t[p+'Search']!=='complete') {
+      out.push(label+'⏸️ Chưa chạy — không lấy được quota'+(n>0?' · '+n+' điểm ghi nhận trước đó':''));
+      continue;
+    }
+    if(!q && n===0 && r.dailySearch?.[p]?.verified===false) {
+      out.push(label+(execution==='attempted'?'⚠️ Đã chạy — chưa xác minh điểm/quota':'❔ Chưa xác minh — không lấy được quota'));
+      continue;
+    }
     out.push(label + (t[p+'Search'] === 'complete' && !q && r.tasks?.[p+'Search'] !== 'complete'
       ? '✅ Đủ mức báo cáo' : labelFor(t[p+'Search'])) +
       (q ? ' · ' + q.earned + '/' + q.max + ' điểm' : n !== null ? ' · ' + n + ' điểm' : ''));
@@ -536,7 +546,7 @@ async function prepareReport() {
   // Balances remain in the private repository; never emit them as Actions outputs.
   const output = {accountId: id, date: r.date, status: r.status, pointsEarned: r.pointsEarned,
     initialBalance: r.initialBalance, finalBalance: r.finalBalance, errorCode: r.errorCode, appCheckIn: r.appCheckIn,
-    nativeStatus:r.nativeStatus, tasks: r.tasks, requiredTasks:r.requiredTasks, completion:r.completion, timings:r.timings, quotaDiagnostics:r.quotaDiagnostics,
+    nativeStatus:r.nativeStatus, tasks: r.tasks, requiredTasks:r.requiredTasks, completion:r.completion, timings:r.timings, quotaDiagnostics:r.quotaDiagnostics, searchExecution:r.searchExecution,
     readingPoints: r.readingPoints, searchPoints:r.searchPoints, dailySearch:r.dailySearch, searchEvidence:r.searchEvidence};
   await require('./rewards-state.cjs').savePrivateReport(output);
   await require('./rewards-operations.cjs').enqueue(`account-${id}`,

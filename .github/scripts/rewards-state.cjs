@@ -299,6 +299,7 @@ async function finish() {
   state[ctx.mode].completion=taskStatus.completion(result.tasks,result.requiredTasks);
   state[ctx.mode].timings=require('./rewards-performance.cjs').normalize(result.timings);
   state[ctx.mode].quotaDiagnostics=(Array.isArray(result.quotaDiagnostics)?result.quotaDiagnostics:[]).map(require('./rewards-search-evidence.cjs').diagnostic).filter(Boolean).slice(-40);
+  state[ctx.mode].searchExecution=require('./rewards-search-evidence.cjs').execution(result.searchExecution);
   if (result.searchPoints) state[ctx.mode].searchPoints=searchLedger.runPoints(result.searchPoints);
   if (result.dailySearch) state[ctx.mode].dailySearch=searchLedger.progress(result.dailySearch);
   if (result.searchEvidence) state[ctx.mode].searchEvidence=require('./rewards-search-evidence.cjs').normalize(result.searchEvidence);
@@ -334,6 +335,7 @@ function safeReport(value, slot, date) {
     completion:taskStatus.completion(value.tasks,value.requiredTasks),
     timings:require('./rewards-performance.cjs').normalize(value.timings),
     quotaDiagnostics:(Array.isArray(value.quotaDiagnostics)?value.quotaDiagnostics:[]).map(require('./rewards-search-evidence.cjs').diagnostic).filter(Boolean).slice(-40),
+    searchExecution:require('./rewards-search-evidence.cjs').execution(value.searchExecution),
     readingPoints: metric(value.readingPoints,true),
     ...(value.searchPoints ? {searchPoints:searchLedger.runPoints(value.searchPoints)} : {}),
     ...(value.dailySearch ? {dailySearch:searchLedger.progress(value.dailySearch)} : {}),

@@ -108,6 +108,7 @@ jobs:
         continue-on-error: true
         env:
           RUN_DATE: ${{ steps.clock.outputs.date }}
+          REWARDS_QUOTA_LAYOUT_OBSERVE: '1'
           ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', '4')] }}
           ACCOUNT_PASSWORD: ${{ secrets[format('ACCOUNT_{0}_PASSWORD', '4')] }}
           ACCOUNT_TOTP_SECRET: ${{ secrets[format('ACCOUNT_{0}_TOTP_SECRET', '4')] }}

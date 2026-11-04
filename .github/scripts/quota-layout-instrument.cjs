@@ -17,15 +17,15 @@ function instrument(botDir, modulePath) {
   rendered = replaceOnce(rendered, '    let task: BrowserTaskPage | undefined',
     '    let task: BrowserTaskPage | undefined\n    let finishNetwork: (() => Promise<void>) | undefined');
   rendered = replaceOnce(rendered, '        task = await BrowserTaskPage.create(source)',
-    '        task = await BrowserTaskPage.create(source)\n        finishNetwork = observeQuotaNetwork(task.page, bot.isMobile)');
+    '        task = await BrowserTaskPage.create(source)\n        if (process.env.REWARDS_QUOTA_LAYOUT_OBSERVE === "1")\n            finishNetwork = observeQuotaNetwork(task.page, bot.isMobile)');
   rendered = replaceOnce(rendered, "            emitEvidence('SEARCH_UI_DIAGNOSTIC', {",
-    "            await inspectQuotaPage(task.page, route, text, detailsClicked, bot.isMobile)\n            emitEvidence('SEARCH_UI_DIAGNOSTIC', {");
+    "            if (process.env.REWARDS_QUOTA_LAYOUT_OBSERVE === '1')\n                await inspectQuotaPage(task.page, route, text, detailsClicked, bot.isMobile).catch(() => undefined)\n            emitEvidence('SEARCH_UI_DIAGNOSTIC', {");
   rendered = replaceOnce(rendered, '        await task?.close().catch(() => undefined)',
     '        await finishNetwork?.().catch(() => undefined)\n        await task?.close().catch(() => undefined)');
   let account = fs.readFileSync(data, 'utf8');
   account = "import { inspectPayload } from '../search/QuotaLayoutProbe'\n" + account;
   account = replaceOnce(account, "        if (inspectSearch)\n            emitEvidence('SEARCH_RESPONSE_SHAPE', {",
-    "        if (inspectSearch) emitEvidence('QUOTA_LAYOUT_API', {\n" +
+    "        if (inspectSearch && process.env.REWARDS_QUOTA_LAYOUT_OBSERVE === '1') emitEvidence('QUOTA_LAYOUT_API', {\n" +
     "            platform: this.bot.isMobile ? 'mobile' : 'desktop', via, status: response.status,\n" +
     "            source: url === URLs.rewards.userInfoApi ? 'rewards-api' : 'bing-flyout',\n" +
     "            shape: inspectPayload(response.data)\n        })\n\n" +

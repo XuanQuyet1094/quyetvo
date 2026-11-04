@@ -11,6 +11,7 @@ const schedule = require('./rewards-schedule.cjs');
 const taskStatus = require('./rewards-tasks.cjs');
 const searchLedger = require('./rewards-search-ledger.cjs');
 const searchEvidence = require('./rewards-search-evidence.cjs');
+const reconcileBudget = require('./rewards-reconcile-budget.cjs');
 const performance = require('./rewards-performance.cjs');
 const v5Events = require('./rewards-v5-events.cjs');
 
@@ -243,6 +244,7 @@ async function runAccount(options = {}) {
   const searchPoints={mobile:0,desktop:0};
   let finalDailySet = null;
   let observedSearch = searchEvidence.normalize(null), claimReceived = 0, hasClaim = false, pendingBefore = null;
+  const searchProgress = {};
   const stages=performance.collector();
   const requested=taskStatus.required(source.RUN_MODE,read(path.join(source.BOT_DIR,'config.example.json')));
   const quotaDiagnostics=[];
@@ -325,9 +327,25 @@ async function runAccount(options = {}) {
   const onSignal = () => stop('CANCELLED');
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
-  const accountLimit = options.timeoutMs ?? (source.RUN_MODE === 'api-benchmark' ? 30 : schedule.lateReconcile(source.RUN_DATE, source.RUN_MODE, source) ? 15 : source.RUN_MODE === 'reconcile' ? 35 : source.RUN_MODE === 'app-read-test' ? 15 : ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000;
-  const timeout = setTimeout(() => stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT'),
-    Math.min(accountLimit, remaining));
+  const lateReconcile = schedule.lateReconcile(source.RUN_DATE, source.RUN_MODE, source);
+  const extendReconcile = options.timeoutMs == null && source.RUN_MODE === 'reconcile' && !lateReconcile;
+  const accountLimit = options.timeoutMs ?? (extendReconcile ? reconcileBudget.BASE_MS :
+    (source.RUN_MODE === 'api-benchmark' ? 30 : lateReconcile || source.RUN_MODE === 'app-read-test' ? 15 :
+      ['app-test','app-auth-probe'].includes(source.RUN_MODE) ? 10 : 75) * 60000);
+  let timeout;
+  function checkTimeout() {
+    if (stopped) return;
+    if (extendReconcile && remaining > accountLimit) {
+      const delay = reconcileBudget.extraDelayMs({slot:id, remaining, started, now:Date.now(),
+        evidence:observedSearch, progress:searchProgress});
+      if (delay) {
+        timeout = setTimeout(checkTimeout, delay);
+        return;
+      }
+    }
+    stop(remaining <= accountLimit ? 'DAILY_WINDOW_EXPIRED' : 'ACCOUNT_TIMEOUT');
+  }
+  timeout = setTimeout(checkTimeout, Math.min(accountLimit, remaining));
   const heartbeat = setInterval(() => console.log('Worker running; details remain private.'), 60000);
   const privateLogPath = captureLogPath(source, id);
   const privateLog = fs.createWriteStream(privateLogPath, {flags: 'w', mode: 0o600});
@@ -359,6 +377,8 @@ async function runAccount(options = {}) {
           const event=JSON.parse(line.slice(at+marker.length));
           if(event.schema!==1 || event.date!==source.RUN_DATE || event.accountId!==id) continue;
           if(marker==='SEARCH_QUOTA_EVIDENCE ') {
+            if (extendReconcile) reconcileBudget.recordProgress(searchProgress, observedSearch,
+              searchEvidence.normalize(event), Date.now());
             observedSearch=searchEvidence.merge(observedSearch,event);
             const d=searchEvidence.diagnostic(event.diagnostic);
             if(d&&(d.reason!=='poll'||d.ui.attempted||!observedSearch.mobile||!observedSearch.desktop)) {

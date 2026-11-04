@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          ref: efa947374cfbf3dbccb7703715aeda782a287402
+          ref: 7a1d333ada11dd87acb06a03a0262e1f974d1faa
           path: bot
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false

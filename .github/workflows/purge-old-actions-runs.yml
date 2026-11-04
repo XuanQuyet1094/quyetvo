@@ -1,0 +1,67 @@
+name: Purge completed Actions runs older than 24 hours
+
+on:
+  schedule:
+    # 00:42 Vietnam time (UTC+7); GitHub may delay scheduled jobs.
+    - cron: '42 17 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/purge-old-actions-runs.yml'
+
+permissions:
+  actions: write
+
+concurrency:
+  group: purge-old-actions-runs
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Delete only completed runs last updated over 24 hours ago
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cutoff_epoch="$(date -u -d '24 hours ago' +%s)"
+          run_list="$RUNNER_TEMP/completed-actions-runs.tsv"
+
+          # Snapshot every page before deleting; deletion during pagination can skip runs.
+          gh api --paginate \
+            "repos/${TARGET_REPO}/actions/runs?per_page=100&status=completed" \
+            --jq '.workflow_runs[] | [.id, .updated_at] | @tsv' > "$run_list"
+
+          scanned=0
+          deleted=0
+          failed=0
+          while IFS=$'\t' read -r run_id updated_at; do
+            [[ -n "$run_id" ]] || continue
+            if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+              echo "::error::Invalid workflow run ID in GitHub API response"
+              exit 1
+            fi
+            ((scanned+=1))
+            [[ "$run_id" == "$CURRENT_RUN_ID" ]] && continue
+
+            # updated_at is conservative: recently rerun jobs are kept.
+            updated_epoch="$(date -u -d "$updated_at" +%s)"
+            (( updated_epoch <= cutoff_epoch )) || continue
+            if gh api -X DELETE "repos/${TARGET_REPO}/actions/runs/${run_id}" >/dev/null; then
+              ((deleted+=1))
+            else
+              echo "::warning::Could not remove completed run ${run_id}"
+              ((failed+=1))
+            fi
+          done < "$run_list"
+
+          echo "Completed runs inspected: $scanned"
+          echo "Expired completed runs deleted: $deleted"
+          echo "Deletion failures: $failed"
+          (( failed == 0 ))

@@ -1,0 +1,66 @@
+name: Read-only Rewards quota validation
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/quota-six-2026-11-04.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rewards-accounts-1-6
+  cancel-in-progress: false
+
+jobs:
+  probe_1:
+    name: Quota check
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 1
+    secrets: inherit
+
+  probe_2:
+    name: Quota check
+    needs: probe_1
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 2
+    secrets: inherit
+
+  probe_3:
+    name: Quota check
+    needs: probe_2
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 3
+    secrets: inherit
+
+  probe_4:
+    name: Quota check
+    needs: probe_3
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 4
+    secrets: inherit
+
+  probe_5:
+    name: Quota check
+    needs: probe_4
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 5
+    secrets: inherit
+
+  probe_6:
+    name: Quota check
+    needs: probe_5
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/quota-readonly-account-2026-11-04.yml
+    with:
+      account: 6
+    secrets: inherit

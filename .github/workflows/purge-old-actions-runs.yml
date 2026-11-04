@@ -10,8 +10,7 @@ on:
     paths:
       - '.github/workflows/purge-old-actions-runs.yml'
 
-permissions:
-  actions: write
+permissions: {}
 
 concurrency:
   group: purge-old-actions-runs
@@ -19,6 +18,8 @@ concurrency:
 
 jobs:
   purge:
+    permissions:
+      actions: write
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -65,3 +66,17 @@ jobs:
           echo "Expired completed runs deleted: $deleted"
           echo "Deletion failures: $failed"
           (( failed == 0 ))
+
+  cleanup_definitions:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Remove expired date-specific workflow files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/cleanup-dated-workflows.cjs

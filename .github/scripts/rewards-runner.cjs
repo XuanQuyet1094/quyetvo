@@ -148,6 +148,8 @@ function configure(diagnosticOnly = false) {
   cfg.debugLogs = false;
   cfg.sessionPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', 'sessions');
   if (['morning','retry','reconcile'].includes(productionMode)) {
+    // Include eligible extra earning activities in every regular daily mode.
+    cfg.workers.doMorePromotions = true;
     cfg.searchSettings ||= {};
     cfg.searchSettings.parallelSearching=false;
     cfg.searchSettings.runOnZeroPoints=false;
@@ -189,6 +191,7 @@ function configure(diagnosticOnly = false) {
     for (const key of Object.keys(cfg.workers || {})) cfg.workers[key] = false;
     // Fresh quota selects missing searches; unverified repair quota cannot authorize queries.
     cfg.workers.doDailySet = true;
+    cfg.workers.doMorePromotions = true;
     cfg.workers.doDailyCheckIn = true;
     cfg.workers.doReadToEarn = true;
     cfg.workers.doMobileSearch = true;

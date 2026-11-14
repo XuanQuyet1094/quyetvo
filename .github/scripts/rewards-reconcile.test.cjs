@@ -21,7 +21,7 @@ test('repair enables sequential desktop/mobile searches but disables unrelated a
  fs.writeFileSync(path.join(dir,'config.example.json'),JSON.stringify({workers:{doDailySet:true,doReadToEarn:true,doDailyCheckIn:true,doMobileSearch:true,doDesktopSearch:false,doBonusSearches:true,doMorePromotions:true},activities:{urlReward:true,searchOnBing:true},searchSettings:{parallelSearching:true,runOnZeroPoints:true},experimental:{edgeBrowsing:true,apiSearch:true,apiSearchOnBing:true}}));
  const result=spawnSync(process.execPath,[path.join(__dirname,'rewards-runner.cjs'),'configure'],{encoding:'utf8',env:{...process.env,BOT_DIR:dir,RUNNER_TEMP:dir,ACCOUNT_SLOT:'2',RUN_MODE:'reconcile'}});
  assert.equal(result.status,0);const cfg=JSON.parse(fs.readFileSync(path.join(dir,'config.json')));
- assert.equal(cfg.experimental.edgeBrowsing,false);assert.equal(cfg.workers.doBonusSearches,false);assert.equal(cfg.workers.doMorePromotions,false);assert.equal(cfg.workers.doMobileSearch,true);assert.equal(cfg.workers.doDesktopSearch,true);
+ assert.equal(cfg.experimental.edgeBrowsing,false);assert.equal(cfg.workers.doBonusSearches,false);assert.equal(cfg.workers.doMorePromotions,true);assert.equal(cfg.workers.doMobileSearch,true);assert.equal(cfg.workers.doDesktopSearch,true);
  assert.equal(cfg.workers.doDailyCheckIn,true);assert.equal(cfg.searchSettings.parallelSearching,false);
  assert.equal(cfg.searchSettings.runOnZeroPoints,false);
  assert.equal(cfg.experimental.apiSearch,false);assert.equal(cfg.experimental.apiSearchOnBing,false);

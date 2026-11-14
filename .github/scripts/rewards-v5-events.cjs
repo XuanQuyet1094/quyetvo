@@ -27,8 +27,12 @@ function collector(env, id) {
     const quotaPlatform=/^(mobile|desktop)-search-quota$/.exec(data.activity||'')?.[1];
     if(quotaPlatform && data.reason==='quota-unavailable' && state.searchExecution[quotaPlatform]==='unknown')
       state.searchExecution[quotaPlatform]='quota_unavailable';
+    if (data.activity === 'keep-earning') {
+      state.tasks.keepEarning = data.status === 'confirmed' && data.reason === 'earn-cards-complete'
+        ? 'complete' : data.reason === 'earn-cards-remaining' ? 'missing' : 'unknown';
+    }
     // Individual successes do not prove that every Keep earning card was discovered.
-    if (data.activity === 'more-promotions' && !complete && ['failed','unconfirmed'].includes(data.status))
+    if (data.activity === 'more-promotions' && state.tasks.keepEarning !== 'complete' && !complete && ['failed','unconfirmed'].includes(data.status))
       state.tasks.keepEarning = 'missing';
     if (data.activity === 'daily-set' && typeof data.offerId === 'string') {
       const date = env.RUN_DATE.replaceAll('-', '');

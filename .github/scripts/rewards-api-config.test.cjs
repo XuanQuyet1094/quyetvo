@@ -61,7 +61,7 @@ for (const mode of ['morning', 'retry', 'reconcile']) {
     assert.equal(config.experimental.edgeBrowsing, mode === 'morning');
     if (mode === 'reconcile') {
       assert.equal(config.workers.doClaimBonusPoints, false);
-      assert.equal(config.workers.doMorePromotions, false);
+      assert.equal(config.workers.doMorePromotions, true);
       assert.equal(config.workers.doPunchCards, false);
       assert.equal(config.autoClaimPunchcardRewards, false);
       assert.equal(config.ensureStreakProtection, false);

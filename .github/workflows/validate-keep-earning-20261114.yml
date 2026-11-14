@@ -1,0 +1,41 @@
+name: Validate worker update
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-keep-earning-20261114.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.REWARDS_PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: 40f10514dc4f1b1952a60f8687dcb74a6a209ed8
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compile and test without account credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          LOG="$RUNNER_TEMP/validation-private.log"
+          trap 'rm -f "$LOG"' EXIT
+          if ! npm ci --include=dev >"$LOG" 2>&1; then
+            echo "::error::Dependency installation failed; no bot was launched."
+            exit 1
+          fi
+          if ! npm run build >>"$LOG" 2>&1; then
+            echo "::error::TypeScript build failed; no bot was launched."
+            exit 1
+          fi
+          if ! node keep-earning.test.cjs >>"$LOG" 2>&1; then
+            echo "::error::Fallback tests failed; no bot was launched."
+            exit 1
+          fi
+          echo "Build and fallback tests passed; no account activities executed."

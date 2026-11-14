@@ -63,7 +63,7 @@ function dailyTaskReview(state) {
 function eligible(state, date, slot) {
   return Boolean(state && state.schema === 1 && state.date === date && state.accountId === slot &&
     !hasBlockedAttempt(state) && !state.retry &&
-    ((state.morning?.status === 'failed' && state.morning.retryable === true) ||
+    (!state.morning || (state.morning?.status === 'failed' && state.morning.retryable === true) ||
      (state.morning?.status === 'completed' && ['incomplete','unverified'].includes(dailyTaskReview(state).status))));
 }
 async function dailySearchReview(state,ctx) {

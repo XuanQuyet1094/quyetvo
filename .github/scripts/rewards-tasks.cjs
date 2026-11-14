@@ -1,5 +1,5 @@
 'use strict';
-const keys = ['dailySet','appCheckIn','readToEarn','mobileSearch','desktopSearch'];
+const keys = ['keepEarning','dailySet','appCheckIn','readToEarn','mobileSearch','desktopSearch'];
 function tasks(value) {
   return Object.fromEntries(keys.map(key => [key, ['complete','missing','unknown'].includes(value?.[key]) ? value[key] : 'unknown']));
 }
@@ -10,7 +10,7 @@ function merge(previous, next) {
   return current;
 }
 const labels={complete:'✅ Hoàn thành',missing:'⚠️ Còn thiếu',unknown:'❔ Chưa xác minh'};
-const workerKeys={dailySet:'doDailySet',appCheckIn:'doDailyCheckIn',readToEarn:'doReadToEarn',mobileSearch:'doMobileSearch',desktopSearch:'doDesktopSearch'};
+const workerKeys={keepEarning:'doMorePromotions',dailySet:'doDailySet',appCheckIn:'doDailyCheckIn',readToEarn:'doReadToEarn',mobileSearch:'doMobileSearch',desktopSearch:'doDesktopSearch'};
 function required(mode,cfg) {
  const scoped={test:['dailySet'],'app-test':['appCheckIn'],'app-read-test':['readToEarn'],diagnostic:[],'app-auth-probe':[]};
  if(Object.hasOwn(scoped,mode))return scoped[mode];
@@ -30,6 +30,7 @@ function review(value,points,requested=keys) {
 function lines(value,search,evidence,compact=false) {
   const t=tasks(value);
   return [
+    '🎯 <b>Keep earning:</b> '+labels[t.keepEarning],
     '🔥 <b>Daily Set:</b> '+labels[t.dailySet],
     '📱 <b>App check-in:</b> '+labels[t.appCheckIn],
     '📰 <b>Read to Earn:</b> '+labels[t.readToEarn],

@@ -484,6 +484,7 @@ function reportLines(r) {
   const t = reportTasks(r), e = searchEvidence.normalize(r.searchEvidence);
   const labelFor = state => ({complete:'✅ Hoàn thành',missing:'⚠️ Còn thiếu',unknown:'❔ Chưa xác minh'}[state]);
   const out = [
+    '🎯 <b>Keep earning:</b> ' + labelFor(t.keepEarning),
     '🔥 <b>Daily Set:</b> ' + labelFor(t.dailySet),
     '📱 <b>App check-in:</b> ' + labelFor(t.appCheckIn),
     '📰 <b>Read to Earn:</b> ' + labelFor(t.readToEarn)

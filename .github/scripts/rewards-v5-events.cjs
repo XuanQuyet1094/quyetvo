@@ -13,6 +13,7 @@ function failure(reason) {
   if (/TOTP|OTP|2FA|authenticator|interactive|HTTP 40[13]|Microsoft login error|SIGN_IN_METHOD_PICKER|recovery email/i.test(text)) return 'AUTH_REQUIRED';
   if (/429|rate.limit/i.test(text)) return 'HTTP_429';
   if (/timeout|timed.out|detached|ERR_|ECONN|ENET|fetch failed/i.test(text)) return 'NETWORK_TIMEOUT';
+  if (/^(?:Failed to acquire rewards context: )?REWARDS_BOOTSTRAP_HTTP_503: \/earn and \/dashboard unavailable$/.test(text)) return 'HTTP_503';
   if (/password|sign.in|login/i.test(text)) return 'AUTH_REQUIRED';
   if (/dashboard|snapshot|render/i.test(text)) return 'DASHBOARD_UNAVAILABLE';
   return 'FLOW_FAILED';

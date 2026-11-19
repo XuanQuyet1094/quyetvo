@@ -160,10 +160,11 @@ async function claim() {
   }
   const {state: old, sha} = await get(ctx);
   const state = old || {schema: 1, date: ctx.date, accountId: ctx.slot};
-  const selection = await require('./rewards-login-review.cjs').selectionView(state, ctx, async entry => {
+  let selection = await require('./rewards-login-review.cjs').selectionView(state, ctx, async entry => {
     const file = await api(`/contents/logs/${ctx.date}/account-${ctx.slot}-run-${entry.runId}-attempt-${entry.runAttempt}.log?ref=${BRANCH}`, {}, true);
     return file ? Buffer.from(file.content, 'base64').toString('utf8') : '';
   });
+  selection = await require('./rewards-setup-review.cjs').selectionView(selection, ctx);
   if (['retry', 'reconcile'].includes(ctx.mode)) {
     state.dailyReview = await dailyPointsReview(state, ctx);
   }
@@ -214,6 +215,8 @@ async function claim() {
     // Ordinary runs can include other points. Only dedicated reading receipts count.
     for (const mode of ['morning', 'retry', 'reconcile']) {
       const entry = state[mode];
+      // Verified SSH failures ran no workers; they consumed zero reading credit.
+      if (selection[mode]?.setupNotStarted === true) continue;
       if (!entry || !/^\d+$/.test(entry.runId || '') || !/^\d+$/.test(entry.runAttempt || '')) continue;
       const file = await api('/contents/reports/' + ctx.date + '/run-' + entry.runId + '-attempt-' + entry.runAttempt + '/account-' + ctx.slot + '.json?ref=' + BRANCH, {}, true);
       if (!file) {receiptsUnavailable = true; break;}

@@ -11,6 +11,9 @@ Storage branch: `rewards-state` in the private repo. Paths: `state/YYYY-MM-DD/ac
 ## Recovery rules
 
 - Only same-day terminal technical failures qualify: network/proxy connection errors, timeout and selected transient HTTP errors.
+- SSH connection timeout before bot startup is a `NETWORK_TIMEOUT`, not a permanent account/configuration error. A new retry attempt opens a fresh SSH tunnel; the morning claim is never deleted or reopened.
+- Older `SETUP_FAILED` morning records are reconsidered only when read-only Actions evidence for the exact run attempt, Vietnam date and account proves the SSH step timed out and the bot step was skipped. Missing/expired logs, partial job lists, wrong accounts and other setup failures do not qualify. Daily caller tokens already allow Actions read; isolated test workflows inherit their original narrower token permissions.
+- Confirmed pre-bot SSH failures consumed zero reading credit. An existing retry claim (running, failed, completed or cancelled) still prevents a second daily retry. Authentication/TOTP/lock guards remain unchanged.
 - Successful runs, unverified completion, generic unknown failures, authentication/locked accounts, configuration failures and missing state do not qualify.
 - Each account reserves its morning or retry attempt before execution. A cancelled/interrupted reservation is consumed, preventing an automatic duplicate. Re-running jobs does not reset the daily retry budget.
 - Missing `REWARDS_STATE_TOKEN`: morning execution continues without persistence; afternoon skips all accounts. A configured but invalid token or conflicting write fails closed before running the affected account.

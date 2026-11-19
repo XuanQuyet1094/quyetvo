@@ -22,8 +22,8 @@ on:
         type: string
         default: ''
 
-permissions:
-  contents: read
+# Inherit the caller's read-only token scope. Daily callers include actions: read
+# for legacy SSH evidence; isolated test callers keep contents: read only.
 
 jobs:
   account:
@@ -80,6 +80,7 @@ jobs:
         id: claim
         if: ${{ steps.window.outputs.run == 'true' }}
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
           REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
         run: node automation/.github/scripts/rewards-state.cjs claim
@@ -124,13 +125,22 @@ jobs:
           printf '%s\n' "$AZDIGI_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/azdigi_key ~/.ssh/known_hosts
           ssh-keygen -y -P '' -f ~/.ssh/azdigi_key >/dev/null
-          ssh -M -S "$RUNNER_TEMP/azdigi.sock" \
+          umask 077
+          ssh_error="$RUNNER_TEMP/azdigi-ssh-error.log"
+          if ssh -M -S "$RUNNER_TEMP/azdigi.sock" \
             -o StrictHostKeyChecking=yes -o BatchMode=yes \
             -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
             -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
             -f -N -D 127.0.0.1:1080 -p "$AZDIGI_SSH_PORT" \
-            -i ~/.ssh/azdigi_key "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST"
+            -i ~/.ssh/azdigi_key "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST" 2>"$ssh_error"; then
+            rm -f "$ssh_error"
+          else
+            ssh_status=$?
+            node automation/.github/scripts/rewards-setup-review.cjs record-ssh "$ssh_error"
+            rm -f "$ssh_error"
+            exit "$ssh_status"
+          fi
           for url in https://rewards.bing.com/ https://www.bing.com/; do
             curl --fail --silent --show-error --location \
               --connect-timeout 15 --max-time 45 \
@@ -189,7 +199,7 @@ jobs:
           if [ -S "$RUNNER_TEMP/azdigi.sock" ]; then
             ssh -S "$RUNNER_TEMP/azdigi.sock" -O exit -p "$AZDIGI_SSH_PORT" "$AZDIGI_SSH_USER@$AZDIGI_SSH_HOST" || true
           fi
-          rm -f ~/.ssh/azdigi_key ~/.ssh/known_hosts "$REPORT_PATH"
+          rm -f ~/.ssh/azdigi_key ~/.ssh/known_hosts "$REPORT_PATH" "$RUNNER_TEMP/azdigi-ssh-error.log"
           rm -f "$BOT_DIR/.env" "$BOT_DIR/config.json"
           rm -rf "$BOT_DIR/sessions" "$BOT_DIR/diagnostics" "$RUNNER_TEMP/rewards-private"
 

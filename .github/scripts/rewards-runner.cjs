@@ -138,6 +138,15 @@ function configure(diagnosticOnly = false) {
   const v5 = /^5\./.test(read(path.join(dir, 'package.json'))?.version || '');
   if (v5) {
     cfg.rewardsMode = 'api';
+    // Vietnam local-query pilot: preserve upstream languages and future upstream vi data.
+    if (!diagnosticOnly && String(accountSlot()) === '1' && ['morning','retry','reconcile'].includes(productionMode)) {
+      const file = path.join(dir, 'dist', 'data', 'search-queries.json');
+      const pool = read(file);
+      if (pool && !Array.isArray(pool) && Array.isArray(pool.en) && !Object.hasOwn(pool, 'vi')) {
+        pool.vi = ['cách bảo quản rau trong tủ lạnh', 'mùa mưa ở Thành phố Hồ Chí Minh bắt đầu khi nào', 'cách nấu cơm bằng nồi cơm điện', 'cách chăm sóc cây húng quế', 'địa điểm tham quan ở Huế', 'cách phân loại rác tại nhà', 'thời gian luộc trứng lòng đào', 'cách vệ sinh quạt điện'];
+        save(file, pool);
+      }
+    }
     // Preserve the production v4 task selection; upstream's example enables Visual Search.
     cfg.workers.doVisualSearch = false;
   }

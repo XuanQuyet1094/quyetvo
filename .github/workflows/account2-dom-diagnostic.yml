@@ -1,0 +1,20 @@
+name: Account 2 DOM diagnostic
+on:
+  push:
+    branches: ['diagnostic/account2-dom-20261127']
+    paths: ['.github/workflows/account2-dom-diagnostic.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: account2-dom-diagnostic-20261127
+  cancel-in-progress: false
+jobs:
+  diagnostic:
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 2
+      run_mode: diagnostic
+      run_date: '2026-11-27'
+      source_ref: 'd3d37979dd99cd2ae0330954a61999abfc7a259a'
+    secrets: inherit

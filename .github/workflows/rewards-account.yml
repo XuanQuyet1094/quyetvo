@@ -103,7 +103,7 @@ jobs:
 
       - name: Configure single-account run
         if: ${{ steps.claim.outputs.run == 'true' }}
-        run: node automation/.github/scripts/rewards-runner.cjs configure
+        run: node automation/.github/scripts/rewards-runner.cjs configure-login-diagnostic
 
       - name: Start verified AZDIGI SOCKS5 tunnel
         if: ${{ steps.claim.outputs.run == 'true' }}
@@ -166,28 +166,6 @@ jobs:
           STATE_STORED: ${{ steps.claim.outputs.stored }}
           JOB_STATUS: ${{ job.status }}
         run: node automation/.github/scripts/rewards-state.cjs finish
-
-      - name: Save account report and queue private notification
-        id: prepare_report
-        if: ${{ always() && steps.claim.outputs.run == 'true' }}
-        env:
-          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
-          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          BOT_OUTCOME: ${{ steps.bot.outcome }}
-          JOB_STATUS: ${{ job.status }}
-        run: node automation/.github/scripts/rewards-runner.cjs prepare-report
-
-      - name: Deliver saved account notification
-        if: ${{ always() && steps.prepare_report.outcome == 'success' }}
-        env:
-          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node automation/.github/scripts/rewards-runner.cjs report
 
       - name: Cleanup tunnel and sensitive files
         if: ${{ always() }}

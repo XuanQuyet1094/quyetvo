@@ -232,6 +232,13 @@ function configure(diagnosticOnly = false) {
     delete cfg.experimental.apiSearchOnBing;
     cfg.experimental.browserSearchApiReport = false;
   }
+  if (process.env.ACCOUNT2_MANUAL_RECONCILE === '2026-11-27' && process.env.RUN_DATE === '2026-11-27' &&
+      process.env.RUN_MODE === 'reconcile' && String(accountSlot()) === '2') {
+    for (const key of Object.keys(cfg.workers)) cfg.workers[key] = false;
+    for (const key of Object.keys(cfg.activities || {})) cfg.activities[key] = false;
+    cfg.workers.doDailyCheckIn = true;
+    cfg.workers.doVisualSearch = true;
+  }
   save(path.join(dir, 'config.json'), cfg);
   fs.writeFileSync(path.join(dir, '.env'), '', {mode: 0o600});
 }

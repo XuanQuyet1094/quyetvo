@@ -170,9 +170,8 @@ async function claim() {
   }
   const manualAccount2 = process.env.ACCOUNT2_MANUAL_RECONCILE === '2026-11-27' &&
     ctx.date === '2026-11-27' && ctx.slot === 2 && ctx.mode === 'reconcile' &&
-    state.reconcile?.status === 'failed' && state.reconcile?.runId === '46000079092' &&
-    state.reconcile?.errorCode === 'NETWORK_TIMEOUT' && state.reconcile?.diagnostic?.stage === 'STARTING' &&
-    !state.reconcile?.logPath;
+    state.reconcile?.status === 'failed' && state.reconcile?.runId === '46000374557' &&
+    state.reconcile?.errorCode === 'ACCOUNT_TIMEOUT' && state.reconcile?.diagnostic?.loginState === 'LOGGED_IN';
   if (['morning','retry','reconcile'].includes(ctx.mode) && (!state[ctx.mode] || manualAccount2) && !hasBlockedAttempt(selection))
     state.searchReview = await dailySearchReview(state,ctx);
   if (ctx.mode === 'reconcile' && ((state.reconcile && !manualAccount2) || Object.values(selection).some(entry =>

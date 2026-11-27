@@ -1,4 +1,4 @@
-name: Account 2 Rewards rerun
+name: Account 2 Rewards connection retry
 on:
   push:
     branches: ['run/account2-earn-20261127']

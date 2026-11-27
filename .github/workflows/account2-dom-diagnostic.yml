@@ -16,5 +16,5 @@ jobs:
       account: 2
       run_mode: diagnostic
       run_date: '2026-11-27'
-      source_ref: 'f4711753dfbcca445f923e5de37a5325d089806e'
+      source_ref: '8715fd9e54f8e1da09de8c0213012d53a099fdc8'
     secrets: inherit

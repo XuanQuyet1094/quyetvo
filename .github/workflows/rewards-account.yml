@@ -37,6 +37,7 @@ jobs:
       RUN_MODE: ${{ inputs.run_mode }}
       RUN_DATE: ${{ inputs.run_date }}
       ACCOUNT_SLOT: ${{ inputs.account }}
+      ACCOUNT2_MANUAL_RECONCILE: '2026-11-27'
       LATE_RECONCILE_DATE: ${{ inputs.late_reconcile_date }}
       BOT_DIR: ${{ github.workspace }}/bot
       REPORT_PATH: ${{ github.workspace }}/rewards-result.json
@@ -167,28 +168,6 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: node automation/.github/scripts/rewards-state.cjs finish
 
-      - name: Save account report and queue private notification
-        id: prepare_report
-        if: ${{ always() && steps.claim.outputs.run == 'true' }}
-        env:
-          ACCOUNT_EMAIL: ${{ secrets[format('ACCOUNT_{0}_EMAIL', inputs.account)] }}
-          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          BOT_OUTCOME: ${{ steps.bot.outcome }}
-          JOB_STATUS: ${{ job.status }}
-        run: node automation/.github/scripts/rewards-runner.cjs prepare-report
-
-      - name: Deliver saved account notification
-        if: ${{ always() && steps.prepare_report.outcome == 'success' }}
-        env:
-          REWARDS_PRIVATE_REPO: ${{ secrets.REWARDS_PRIVATE_REPO }}
-          REWARDS_STATE_TOKEN: ${{ secrets.REWARDS_STATE_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node automation/.github/scripts/rewards-runner.cjs report
-
       - name: Cleanup tunnel and sensitive files
         if: ${{ always() }}
         env:
@@ -202,10 +181,6 @@ jobs:
           rm -f ~/.ssh/azdigi_key ~/.ssh/known_hosts "$REPORT_PATH" "$RUNNER_TEMP/azdigi-ssh-error.log"
           rm -f "$BOT_DIR/.env" "$BOT_DIR/config.json"
           rm -rf "$BOT_DIR/sessions" "$BOT_DIR/diagnostics" "$RUNNER_TEMP/rewards-private"
-
-      - name: Random rest before next account
-        if: ${{ !cancelled() && steps.claim.outputs.run == 'true' && inputs.run_mode != 'test' && inputs.run_mode != 'app-test' && inputs.run_mode != 'app-auth-probe' && inputs.run_mode != 'app-read-test' && inputs.account < 6 }}
-        run: node automation/.github/scripts/rewards-runner.cjs rest
 
       - name: Preserve bot failure status
         if: ${{ !cancelled() && steps.bot.outcome == 'failure' }}

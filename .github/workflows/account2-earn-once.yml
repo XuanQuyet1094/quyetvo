@@ -1,0 +1,20 @@
+name: Account 2 Rewards rerun
+on:
+  push:
+    branches: ['run/account2-earn-20261127']
+    paths: ['.github/workflows/account2-earn-once.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: account2-earn-20261127
+  cancel-in-progress: false
+jobs:
+  earn:
+    uses: ./.github/workflows/rewards-account.yml
+    with:
+      account: 2
+      run_mode: reconcile
+      run_date: '2026-11-27'
+      source_ref: '40f10514dc4f1b1952a60f8687dcb74a6a209ed8'
+    secrets: inherit

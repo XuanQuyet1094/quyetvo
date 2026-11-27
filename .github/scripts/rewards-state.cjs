@@ -168,9 +168,13 @@ async function claim() {
   if (['retry', 'reconcile'].includes(ctx.mode)) {
     state.dailyReview = await dailyPointsReview(state, ctx);
   }
-  if (['morning','retry','reconcile'].includes(ctx.mode) && !state[ctx.mode] && !hasBlockedAttempt(selection))
+  const manualAccount2 = process.env.ACCOUNT2_MANUAL_RECONCILE === '2026-11-27' &&
+    ctx.date === '2026-11-27' && ctx.slot === 2 && ctx.mode === 'reconcile' &&
+    state.reconcile?.status === 'failed' && state.reconcile?.runId === '45989403336' &&
+    state.reconcile?.errorCode === 'NETWORK_TIMEOUT' && state.reconcile?.diagnostic?.loginState === 'UNKNOWN';
+  if (['morning','retry','reconcile'].includes(ctx.mode) && (!state[ctx.mode] || manualAccount2) && !hasBlockedAttempt(selection))
     state.searchReview = await dailySearchReview(state,ctx);
-  if (ctx.mode === 'reconcile' && (state.reconcile || Object.values(selection).some(entry =>
+  if (ctx.mode === 'reconcile' && ((state.reconcile && !manualAccount2) || Object.values(selection).some(entry =>
       entry && typeof entry === 'object' && (entry.status === 'running' ||
       [entry.errorCode, ...(entry.diagnostic?.errors || [])].some(label => blocked.has(label)))))) {
     output('run', 'false'); console.log('Skipped: an attempt is active, blocked, or already reserved.'); return;
@@ -243,7 +247,7 @@ async function claim() {
       progress:searchLedger.progress(state.searchReview)}),{mode:0o600});
   }
   // Claim BEFORE the bot starts. Cancellation or re-running a job cannot reset the retry budget.
-  const history = ['app-test', 'app-auth-probe', 'app-read-test'].includes(ctx.mode) && state[ctx.mode]
+  const history = (manualAccount2 || ['app-test', 'app-auth-probe', 'app-read-test'].includes(ctx.mode)) && state[ctx.mode]
     ? [...(state[ctx.mode].history || []), {...state[ctx.mode], history: undefined}] : [];
   state[ctx.mode] = {...(history.length ? {history} : {}), ...(readingPointsBudget ? {readingPointsBudget} : {}), status: 'running', retryable: false, errorCode: null,
     runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,

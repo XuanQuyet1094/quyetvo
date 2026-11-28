@@ -36,7 +36,7 @@ function configured(mode, {version = '5.0.0', readingComplete = false} = {}) {
     assert.equal(fs.readFileSync(path.join(dir, '.env'), 'utf8'), '');
     assert.equal(config.headless, true);
     assert.equal(config.clusters, 1);
-    assert.deepEqual(config.accountDelay, {min: '100sec', max: '180sec'});
+    assert.deepEqual(config.accountDelay, ['morning','retry','reconcile'].includes(mode) ? {min:'15sec',max:'30sec'} : {min:'100sec',max:'180sec'});
     assert.ok(Object.values(config.webhook).every(channel => channel.enabled === false));
     assert.equal(config.errorDiagnostics, false);
     assert.equal(config.debugLogs, false);

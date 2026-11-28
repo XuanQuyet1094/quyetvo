@@ -153,6 +153,7 @@ function configure(diagnosticOnly = false) {
   cfg.headless = true;
   cfg.clusters = 1;
   cfg.accountDelay = {min: '100sec', max: '180sec'};
+  require('./rewards-runtime-profile.cjs').apply(cfg, process.env.RUN_MODE);
   cfg.errorDiagnostics = false;
   cfg.debugLogs = false;
   cfg.sessionPath = path.join(process.env.RUNNER_TEMP, 'rewards-private', 'sessions');
@@ -636,7 +637,7 @@ async function main() {
       break;
     }
     case 'rest': {
-      const seconds = randomInt(100, 181);
+      const seconds = randomInt(...require('./rewards-runtime-profile.cjs').restRange(process.env.RUN_MODE));
       console.log(`Resting ${seconds} seconds before the next account.`);
       await wait(seconds * 1000);
       break;

@@ -557,11 +557,20 @@ function accountMessage(r, email, url) {
 async function telegram(text, env = process.env, fetchFn = fetch) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) throw new Error('Telegram secrets missing');
   // Do not retry ambiguous network failures: that can send duplicate notifications.
-  const response = await fetchFn(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({chat_id: env.TELEGRAM_CHAT_ID, text, parse_mode: 'HTML', link_preview_options: {is_disabled: true}}),
-    signal: AbortSignal.timeout(20000)
-  });
+  let response;
+  if (text.length > 4096) {
+    const plain=text.replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+    const form=new FormData();
+    form.append('chat_id',env.TELEGRAM_CHAT_ID);
+    form.append('caption','🏆 MICROSOFT REWARDS · '+(env.REWARDS_GROUP_LABEL==='group2'?'NHÓM 2':'NHÓM 1')+' · Báo cáo đầy đủ 6 tài khoản trong file đính kèm.');
+    form.append('document',new Blob([plain],{type:'text/plain;charset=utf-8'}),'rewards-'+(env.RUN_DATE||dateVN())+'-'+(env.RUN_MODE||'report')+'.txt');
+    response=await fetchFn(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`,{method:'POST',body:form,signal:AbortSignal.timeout(20000)});
+  } else {
+    response=await fetchFn(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:env.TELEGRAM_CHAT_ID,text,parse_mode:'HTML',link_preview_options:{is_disabled:true}}),
+      signal:AbortSignal.timeout(20000)});
+  }
   const body = await response.json();
   if (!response.ok || body.ok !== true) {
     const error = new Error('Telegram rejected notification');
@@ -582,7 +591,7 @@ async function prepareReport() {
     nativeStatus:r.nativeStatus, tasks: r.tasks, requiredTasks:r.requiredTasks, completion:r.completion, timings:r.timings, quotaDiagnostics:r.quotaDiagnostics, searchExecution:r.searchExecution,
     readingPoints: r.readingPoints, searchPoints:r.searchPoints, dailySearch:r.dailySearch, searchEvidence:r.searchEvidence};
   await require('./rewards-state.cjs').savePrivateReport(output);
-  await require('./rewards-operations.cjs').enqueue(`account-${id}`,
+  if (!['morning','retry','reconcile'].includes(process.env.RUN_MODE)) await require('./rewards-operations.cjs').enqueue(`account-${id}`,
     accountMessage(r, process.env.ACCOUNT_EMAIL, process.env.RUN_URL));
   console.log('Account report saved privately; notification queued.');
 }
@@ -617,12 +626,12 @@ async function main() {
     case 'configure-login-diagnostic': configure(true); break;
     case 'run': process.exitCode = await runAccount(); break;
     case 'prepare-report': await prepareReport(); break;
-    case 'report': await require('./rewards-operations.cjs').deliver(`account-${accountSlot()}`, telegram); break;
+    case 'report': if (!['morning','retry','reconcile'].includes(process.env.RUN_MODE)) await require('./rewards-operations.cjs').deliver(`account-${accountSlot()}`, telegram); break;
     case 'resend': await require('./rewards-operations.cjs').resendPending(telegram); break;
     case 'summary': {
       const jobs = await require('./rewards-state.cjs').readPrivateReports(JSON.parse(process.env.JOB_RESULTS));
       const operations = require('./rewards-operations.cjs');
-      await operations.enqueue('summary', summaryMessage(jobs));
+      await operations.enqueue('summary', require('./rewards-combined-summary.cjs').combinedSummary(jobs, process.env, summaryMessage, accountMessage));
       await operations.deliver('summary', telegram);
       break;
     }

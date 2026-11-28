@@ -1,17 +1,17 @@
 'use strict';
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {MORNING, RETRY, planRun, canStart, deadline} = require('./rewards-schedule.cjs');
+const {MORNING, RETRY, RECONCILE, planRun, canStart, deadline} = require('./rewards-schedule.cjs');
 const at = time => Date.parse('2026-10-06T' + time + '+07:00');
 const env = cron => ({GITHUB_EVENT_NAME: 'schedule', EVENT_SCHEDULE: cron});
 test('UTC cron maps to correct Vietnam date and mode', () => {
-  assert.deepEqual(planRun(env(MORNING), '2026-10-05T19:17:00Z', at('02:20:00')),
+  assert.deepEqual(planRun(env(MORNING), '2026-10-05T18:17:00Z', at('01:20:00')),
     {date: '2026-10-06', mode: 'morning', run: true});
-  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('12:40:00')).mode, 'retry');
+  assert.equal(planRun(env(RETRY), '2026-10-06T04:37:00Z', at('11:40:00')).mode, 'retry');
 });
 test('late scheduled starts are skipped even on the same date', () => {
-  assert.equal(planRun(env(MORNING), '2026-10-05T19:17:00Z', at('10:00:00')).run, false);
-  assert.equal(planRun(env(RETRY), '2026-10-06T05:37:00Z', at('21:01:00')).run, false);
+  assert.equal(planRun(env(MORNING), '2026-10-05T18:17:00Z', at('10:00:00')).run, false);
+  assert.equal(planRun(env(RETRY), '2026-10-06T04:37:00Z', at('21:01:00')).run, false);
   assert.equal(planRun(env(MORNING), '2026-10-06T16:42:00Z', at('23:42:00')).run, false);
 });
 test('queued run across midnight retains original date and is not started', () => {
@@ -76,3 +76,10 @@ test('late claim performs no private API request and consumes no attempt', async
   }
 });
 
+
+test('all three new Vietnam start times are eligible and early starts are refused',()=>{
+ for(const [cron,utc,local,early,mode] of [[MORNING,'2026-10-05T18:17:00Z','01:17:00','01:16:59','morning'],[RETRY,'2026-10-06T04:37:00Z','11:37:00','11:36:59','retry'],[RECONCILE,'2026-10-06T08:17:00Z','15:17:00','15:16:59','reconcile']]){
+ assert.deepEqual(planRun(env(cron),utc,at(local)),{date:'2026-10-06',mode,run:true});
+ assert.equal(planRun(env(cron),utc,at(early)).run,false);
+ }
+});

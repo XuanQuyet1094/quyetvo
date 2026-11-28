@@ -18,7 +18,7 @@ async function write(route, value, sha) {
   return result.content.sha;
 }
 async function enqueue(key, text) {
-  if (typeof text !== 'string' || !text.length || text.length > 4096) throw new Error('Invalid notification');
+  if (typeof text !== 'string' || !text.length || text.length > (key === 'summary' ? 65536 : 4096)) throw new Error('Invalid notification');
   await state.requirePrivateReports();
   const route = notificationRoute(key);
   const old = await state.api(`${route}?ref=${privateBranch}`,{},true);

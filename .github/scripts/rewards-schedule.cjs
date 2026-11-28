@@ -1,8 +1,8 @@
 'use strict';
 const fs = require('node:fs');
-const MORNING = '17 19 * * *'; // 02:17 Vietnam
-const RETRY = '37 5 * * *'; // 12:37 Vietnam
-const RECONCILE = '17 11 * * *'; // 18:17 Vietnam
+const MORNING = '17 18 * * *'; // 01:17 Vietnam
+const RETRY = '37 4 * * *'; // 11:37 Vietnam
+const RECONCILE = '17 8 * * *'; // 15:17 Vietnam
 const RECONCILE_BACKUP = '17 12,13 * * *'; // 19:17 / 20:17 Vietnam, same one-per-day claim
 const dateVN = ms => new Date(ms + 7 * 3600000).toISOString().slice(0, 10);
 function lateReconcile(date, mode, env = process.env) {
@@ -28,7 +28,7 @@ function planRun(env, createdAt, now = Date.now()) {
   if (!['morning', 'retry', 'reconcile'].includes(mode)) throw new Error('Invalid mode');
   const local = new Date(now + 7 * 3600000);
   const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
-  const inWindow = !scheduled || (mode === 'morning' ? minutes >= 137 && minutes < 600 : mode === 'reconcile' ? minutes >= 1097 && minutes < 1330 : minutes >= 757 && minutes <= 1260);
+  const inWindow = !scheduled || (mode === 'morning' ? minutes >= 77 && minutes < 600 : mode === 'reconcile' ? minutes >= 917 && minutes < 1330 : minutes >= 697 && minutes <= 1260);
   return {date, mode, run: canStart(date, now, mode) && inWindow};
 }
 async function plan(env = process.env, fetchFn = fetch, now = Date.now()) {
